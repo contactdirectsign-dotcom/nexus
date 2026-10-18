@@ -1,0 +1,84 @@
+@import 'tailwindcss';
+
+/* NEXUS design tokens: colours, type, glow. Change them here and the whole app follows. */
+@theme {
+  --color-nx-bg: #07030c;
+  --color-nx-surface: #100818;
+  --color-nx-raised: #1a0e26;
+  --color-nx-line: #3a1d44;
+  --color-nx-pink: #ff2d95;
+  --color-nx-magenta: #e11cc4;
+  --color-nx-text: #ffffff;
+  --color-nx-muted: #a99bb5;
+  --color-nx-ok: #4ade80;
+  --color-nx-warn: #fbbf24;
+
+  --font-display: 'Rajdhani', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  --shadow-nx-glow: 0 0 18px rgba(255, 45, 149, 0.28);
+  --radius-nx: 14px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-nx-bg);
+  color: var(--color-nx-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  background-image:
+    radial-gradient(60rem 30rem at 85% -10%, rgba(225, 28, 196, 0.12), transparent 60%),
+    radial-gradient(50rem 30rem at -10% 110%, rgba(255, 45, 149, 0.1), transparent 60%);
+  background-attachment: fixed;
+}
+
+/* Clear keyboard focus indicator */
+:focus-visible {
+  outline: 2px solid var(--color-nx-pink);
+  outline-offset: 2px;
+}
+
+.nx-glass {
+  background: rgba(26, 14, 38, 0.62);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--color-nx-line);
+  border-radius: var(--radius-nx);
+}
+
+.nx-glow {
+  box-shadow: var(--shadow-nx-glow);
+}
+
+/* Reduced-effects mode (user setting) and OS reduced-motion preference */
+html[data-reduced='true'] .nx-glass {
+  backdrop-filter: none;
+  background: var(--color-nx-surface);
+}
+html[data-reduced='true'] .nx-glow {
+  box-shadow: none;
+}
+html[data-reduced='true'] body {
+  background-image: none;
+}
+html[data-reduced='true'] *,
+html[data-reduced='true'] *::before,
+html[data-reduced='true'] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
