@@ -5,11 +5,14 @@ import { useSettings } from '../storage/settings';
 import { ErrorBoundary } from './ErrorBoundary';
 import { BottomNav, SideNav } from './Nav';
 import { TopBar } from './TopBar';
+import { GestureHud } from './GestureHud';
+import { useGestureControl } from './useGestureControl';
 import { Dashboard } from '../modules/dashboard/Dashboard';
 
 // Less-used modules load only when opened, which keeps the first load small on phones.
 const World = lazy(() => import('../modules/world/World').then((m) => ({ default: m.World })));
 const Pulse = lazy(() => import('../modules/pulse/Pulse').then((m) => ({ default: m.Pulse })));
+const SetupWizard = lazy(() => import('../modules/setup/SetupWizard').then((m) => ({ default: m.SetupWizard })));
 const Settings = lazy(() => import('../modules/settings/Settings').then((m) => ({ default: m.Settings })));
 
 const TITLES: Record<Route, string> = {
@@ -17,6 +20,7 @@ const TITLES: Record<Route, string> = {
   world: 'World',
   pulse: 'Pulse',
   settings: 'Settings',
+  setup: 'Gesture setup',
 };
 
 function View({ route, navigate }: { route: Route; navigate: (r: Route) => void }) {
@@ -27,6 +31,8 @@ function View({ route, navigate }: { route: Route; navigate: (r: Route) => void 
       return <Pulse />;
     case 'settings':
       return <Settings />;
+    case 'setup':
+      return <SetupWizard />;
     default:
       return <Dashboard onNavigate={navigate} />;
   }
@@ -35,6 +41,7 @@ function View({ route, navigate }: { route: Route; navigate: (r: Route) => void 
 export function App() {
   const [route, navigate] = useHashRoute();
   const settings = useSettings();
+  useGestureControl(route, navigate);
 
   // Keep <html data-reduced> and the page title in sync with state.
   useEffect(() => {
@@ -68,6 +75,7 @@ export function App() {
           </ErrorBoundary>
         </main>
       </div>
+      <GestureHud hidden={safeRoute === 'setup'} />
       <BottomNav route={safeRoute} onNavigate={navigate} />
     </div>
   );

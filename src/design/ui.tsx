@@ -96,3 +96,44 @@ export function EmptyState({
     </div>
   );
 }
+
+/** A labelled settings row: description on the left, control on the right (stacked on phones). */
+export function SettingRow({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-2 border-b border-nx-line/60 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <div className="text-sm font-medium">{label}</div>
+        {hint && <div className="text-xs text-nx-muted">{hint}</div>}
+      </div>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+/** Simple horizontal progress bar (0..1). */
+export function ProgressBar({ value, label }: { value: number; label: string }) {
+  const pct = Math.round(Math.min(1, Math.max(0, value)) * 100);
+  return (
+    <div
+      role="progressbar"
+      aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={pct}
+      className="h-2 w-full overflow-hidden rounded-full bg-nx-surface"
+    >
+      <div className="h-full rounded-full bg-nx-pink" style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+export const selectClass =
+  'min-h-11 rounded-xl border border-nx-line bg-nx-surface px-3 text-sm text-nx-text';

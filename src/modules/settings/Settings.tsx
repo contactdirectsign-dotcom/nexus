@@ -1,12 +1,7 @@
-import { useState, type ReactNode } from 'react';
-import { Badge, Button, Panel } from '../../design/ui';
-import {
-  ACTIONS,
-  GESTURES,
-  assignGesture,
-  isGestureId,
-  type ActionId,
-} from '../../gestures/definitions';
+import { useState } from 'react';
+import { Badge, Button, Panel, SettingRow as Row, selectClass } from '../../design/ui';
+import { engine, useEngine } from '../../gestures/engine';
+import { go } from '../../lib/useHashRoute';
 import {
   eraseAllLocalData,
   resetSettings,
@@ -15,18 +10,7 @@ import {
   type Hand,
   type TimeFormat,
 } from '../../storage/settings';
-
-function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-2 border-b border-nx-line/60 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <div className="text-sm font-medium">{label}</div>
-        {hint && <div className="text-xs text-nx-muted">{hint}</div>}
-      </div>
-      <div>{children}</div>
-    </div>
-  );
-}
+import { GestureAssignments } from './GestureAssignments';
 
 function Switch({
   checked,
@@ -58,12 +42,11 @@ function Switch({
   );
 }
 
-const selectClass =
-  'min-h-11 rounded-xl border border-nx-line bg-nx-surface px-3 text-sm text-nx-text';
-
 export function Settings() {
   const settings = useSettings();
+  const cam = useEngine();
   const [confirmErase, setConfirmErase] = useState(false);
+  const cameraOn = cam.status === 'running' || cam.status === 'paused';
 
   return (
     <div className="grid gap-4">
@@ -91,15 +74,43 @@ export function Settings() {
         </Row>
       </Panel>
 
-      <Panel title="Gestures" action={<Badge tone="warn">Camera control: Phase 2</Badge>}>
+      <Panel
+        title="Gestures"
+        action={<Badge tone={settings.setupComplete ? 'ok' : 'warn'}>{settings.setupComplete ? 'Set up' : 'Setup needed'}</Badge>}
+      >
         <p className="mb-2 text-sm text-nx-muted">
-          Choose your preferences now. Camera hand tracking is not built yet, so these gestures do not trigger
-          anything until Phase 2. Touch, mouse and keyboard always work.
+          Gestures use your camera to see your hand. Video is processed on this device and is never recorded or
+          uploaded. Touch, mouse and keyboard always work.
         </p>
-        <Row label="Camera gesture control" hint="Unavailable until the Gesture Lab (Phase 2) is built.">
-          <Switch label="Camera gesture control" checked={false} disabled onChange={() => undefined} />
+        <Row
+          label="Camera gesture control"
+          hint={
+            settings.setupComplete
+              ? 'Turn the camera and hand tracking on or off.'
+              : 'Run the first-time setup before turning this on.'
+          }
+        >
+          <Switch
+            label="Camera gesture control"
+            checked={cameraOn || cam.status === 'requesting' || cam.status === 'loading'}
+            disabled={!settings.setupComplete}
+            onChange={(on) => {
+              if (on) {
+                updateSettings({ gestureEnabled: true });
+                void engine.start();
+              } else {
+                updateSettings({ gestureEnabled: false });
+                engine.stop();
+              }
+            }}
+          />
         </Row>
-        <Row label="Preferred hand">
+        {cam.status === 'error' && cam.error && (
+          <p role="alert" className="my-2 rounded-xl border border-nx-warn/60 p-3 text-sm text-nx-warn">
+            {cam.error}
+          </p>
+        )}
+        <Row label="Preferred hand" hint="Gestures from the other hand are ignored.">
           <select
             aria-label="Preferred hand"
             className={selectClass}
@@ -109,12 +120,12 @@ export function Settings() {
             <option value="right">Right hand</option>
             <option value="left">Left hand</option>
             <option value="either">Either hand</option>
-            <option value="both">Both hands</option>
+            <option value="both">Both hands (either can control)</option>
           </select>
         </Row>
         <Row
           label={`Sensitivity: ${Math.round(settings.sensitivity * 100)}%`}
-          hint="Lower means fewer accidental triggers; higher reacts to smaller movements."
+          hint="Lower means fewer accidental triggers; higher reacts sooner and to smaller movements."
         >
           <input
             type="range"
@@ -131,48 +142,24 @@ export function Settings() {
       <Panel title="Gesture assignments">
         <p className="mb-2 text-sm text-nx-muted">
           Each gesture can trigger one action. Picking a gesture that is already used moves it to this action.
+          Poses must be held still briefly before they count, which prevents accidental triggers.
         </p>
-        <ul>
-          {ACTIONS.map((a) => {
-            const value = settings.mappings[a.id];
-            return (
-              <li key={a.id}>
-                <Row label={a.label} hint={a.description}>
-                  <select
-                    aria-label={`Gesture for ${a.label}`}
-                    className={selectClass}
-                    value={value ?? ''}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      updateSettings({
-                        mappings: assignGesture(settings.mappings, a.id as ActionId, isGestureId(v) ? v : null),
-                      });
-                    }}
-                  >
-                    <option value="">Disabled</option>
-                    {GESTURES.map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {g.label}
-                      </option>
-                    ))}
-                  </select>
-                </Row>
-              </li>
-            );
-          })}
-        </ul>
+        <GestureAssignments />
       </Panel>
 
       <Panel title="Setup">
-        <Row label="First-time gesture setup" hint="The guided wizard arrives in Phase 2 and can be repeated from here.">
-          <Button disabled>Run setup (Phase 2)</Button>
+        <Row label="Gesture setup wizard" hint="Camera permission, hand choice, calibration and practice. Safe to repeat.">
+          <Button variant="primary" onClick={() => go('setup')}>
+            {settings.setupComplete ? 'Run setup again' : 'Start setup'}
+          </Button>
         </Row>
       </Panel>
 
       <Panel title="Privacy and data">
         <p className="mb-2 text-sm text-nx-muted">
-          Everything NEXUS saves stays in this browser on this device. The camera is not used in this version, and
-          when it is, video will be processed on your device and never recorded or uploaded.
+          Everything NEXUS saves stays in this browser on this device. Camera frames are analysed live and
+          discarded; nothing is recorded, stored or sent anywhere. The camera is released when you stop tracking
+          or leave the app.
         </p>
         <Row label="Reset settings" hint="Restores all settings and gesture assignments to defaults.">
           <Button onClick={() => resetSettings()}>Reset settings</Button>
@@ -183,6 +170,7 @@ export function Settings() {
               <Button
                 variant="danger"
                 onClick={() => {
+                  engine.stop();
                   eraseAllLocalData();
                   setConfirmErase(false);
                 }}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-export const ROUTES = ['dashboard', 'world', 'pulse', 'settings'] as const;
+export const ROUTES = ['dashboard', 'world', 'pulse', 'settings', 'setup'] as const;
 export type Route = (typeof ROUTES)[number];
 
 export function parseRoute(hash: string): Route {
@@ -23,4 +23,9 @@ export function useHashRoute(): [Route, (r: Route) => void] {
   }, []);
 
   return [route, navigate];
+}
+
+/** Go to a page from anywhere (also usable outside React). */
+export function go(route: Route): void {
+  window.location.hash = `#/${route}`;
 }

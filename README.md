@@ -4,7 +4,7 @@
 
 A personal, free, gesture-controlled app. Black-and-pink interface, built with React, TypeScript, Vite and Tailwind CSS, hosted free on GitHub Pages. No backend, no paid services.
 
-> **Status: Phase 1 (Foundation).** The app shell, design system, navigation, dashboard and settings work. Camera gestures, the 3D globe, calendar and news are **not built yet** and are labelled as such in the app.
+> **Status: Phase 2 (Gesture Lab).** App shell, dashboard, settings and camera hand-gesture control with a setup wizard. The 3D globe, calendar and news are **not built yet** and are labelled as such in the app.
 
 ## Put it online for free (no installs needed)
 
@@ -36,7 +36,8 @@ src/
   app/          shell: App, TopBar, Nav, ErrorBoundary
   design/       reusable UI (Panel, Button, Badge, EmptyState), icons
   modules/      dashboard, world, pulse, settings (one folder each)
-  gestures/     gesture + action catalogue and the mapping logic
+  gestures/     catalogue + mapping, pose recognizer, swipe/hold tracker, camera engine (MediaPipe)
+  modules/setup first-time gesture setup wizard
   storage/      settings store (saved in the browser)
   lib/          time helpers, hash router
   test/         test setup
@@ -47,7 +48,7 @@ Colours, fonts and glow are defined once in `src/index.css` (`@theme`). Navigati
 
 ## Privacy
 
-Everything is stored in your own browser. No account, no tracking. The camera is **not used** in Phase 1. When added, hand tracking will run on the device and video will never be recorded or uploaded.
+Everything is stored in your own browser. No account, no tracking. The camera is used **only for hand tracking, only after you start it**, and only on your device: video is never recorded, stored or uploaded. A red indicator with Pause and Stop buttons is shown whenever the camera is on, and the camera is released when you leave the tab. The first start downloads the hand-tracking model (a few MB) from public CDNs (jsDelivr and Google Storage).
 
 ## Planned architecture decisions
 
@@ -57,6 +58,6 @@ Everything is stored in your own browser. No account, no tracking. The camera is
 
 ## Dependencies
 
-react, react-dom, framer-motion (runtime); vite, typescript, tailwindcss, vitest, jsdom, React Testing Library (development). MediaPipe and Three.js join in Phases 2 and 3.
+react, react-dom, framer-motion, @mediapipe/tasks-vision 1.1.1 (runtime); vite, typescript, tailwindcss, vitest, jsdom, React Testing Library (development). Three.js joins in Phase 3.
 
 See `FEATURES.md` for the feature and test checklist.

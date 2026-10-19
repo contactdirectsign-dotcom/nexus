@@ -1,22 +1,41 @@
 import { HandIcon, SettingsIcon } from '../design/icons';
 import { Badge } from '../design/ui';
+import type { EngineStatus } from '../gestures/engine';
+import { useEngine } from '../gestures/engine';
 import { formatDate, formatTime, useNow } from '../lib/time';
 import type { Route } from '../lib/useHashRoute';
 import { useSettings } from '../storage/settings';
+import { CameraControls } from './CameraControls';
 
-export function gestureStatus(s: { gestureEnabled: boolean; setupComplete: boolean }): {
-  label: string;
-  tone: 'muted' | 'warn' | 'ok';
-} {
+export function gestureStatus(
+  s: { gestureEnabled: boolean; setupComplete: boolean },
+  engineStatus: EngineStatus = 'idle',
+): { label: string; tone: 'muted' | 'warn' | 'ok' } {
+  switch (engineStatus) {
+    case 'running':
+      return { label: 'Gestures: active', tone: 'ok' };
+    case 'paused':
+      return { label: 'Gestures: paused', tone: 'warn' };
+    case 'requesting':
+    case 'loading':
+      return { label: 'Gestures: starting…', tone: 'muted' };
+    case 'error':
+      return { label: 'Gestures: camera problem', tone: 'warn' };
+    case 'suspended':
+      return { label: 'Gestures: camera released', tone: 'muted' };
+    default:
+      break;
+  }
   if (!s.setupComplete) return { label: 'Gestures: setup needed', tone: 'warn' };
   if (!s.gestureEnabled) return { label: 'Gestures: off', tone: 'muted' };
-  return { label: 'Gestures: ready', tone: 'ok' };
+  return { label: 'Gestures: ready (camera off)', tone: 'muted' };
 }
 
 export function TopBar({ onNavigate }: { onNavigate: (r: Route) => void }) {
   const settings = useSettings();
+  const engine = useEngine();
   const now = useNow(1000);
-  const status = gestureStatus(settings);
+  const status = gestureStatus(settings, engine.status);
 
   return (
     <header className="sticky top-0 z-20 border-b border-nx-line bg-nx-bg/85 backdrop-blur">
@@ -49,6 +68,7 @@ export function TopBar({ onNavigate }: { onNavigate: (r: Route) => void }) {
           </button>
         </div>
       </div>
+      <CameraControls />
     </header>
   );
 }

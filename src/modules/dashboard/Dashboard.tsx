@@ -3,6 +3,7 @@ import { deviceTimeZone } from '../../lib/time';
 import type { Route } from '../../lib/useHashRoute';
 import { useSettings } from '../../storage/settings';
 import { gestureStatus } from '../../app/TopBar';
+import { useEngine } from '../../gestures/engine';
 
 /** Decorative wireframe globe. It is only an illustration; the real 3D Earth arrives in Phase 3. */
 function GlobeArt() {
@@ -21,7 +22,9 @@ function GlobeArt() {
 
 export function Dashboard({ onNavigate }: { onNavigate: (r: Route) => void }) {
   const settings = useSettings();
-  const status = gestureStatus(settings);
+  const cam = useEngine();
+  const status = gestureStatus(settings, cam.status);
+  const cameraOn = cam.status === 'running' || cam.status === 'paused';
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
@@ -57,7 +60,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (r: Route) => void }) {
           <div className="flex items-center justify-between gap-2">
             <dt className="text-nx-muted">Camera</dt>
             <dd>
-              <Badge>Not in use</Badge>
+              <Badge tone={cameraOn ? 'pink' : 'muted'}>{cameraOn ? 'In use' : 'Not in use'}</Badge>
             </dd>
           </div>
           <div className="flex items-center justify-between gap-2">
@@ -66,8 +69,13 @@ export function Dashboard({ onNavigate }: { onNavigate: (r: Route) => void }) {
           </div>
         </dl>
         <p className="mt-4 text-xs text-nx-muted">
-          NEXUS never records or uploads camera video. Camera tracking starts only after you set it up in Phase 2.
+          NEXUS never records or uploads camera video. The camera turns on only when you start it.
         </p>
+        {!settings.setupComplete && (
+          <Button variant="primary" className="mt-3 w-full" onClick={() => onNavigate('setup')}>
+            Set up gestures
+          </Button>
+        )}
       </Panel>
 
       <Panel
