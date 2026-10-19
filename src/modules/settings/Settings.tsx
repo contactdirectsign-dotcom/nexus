@@ -110,6 +110,13 @@ export function Settings() {
             {cam.error}
           </p>
         )}
+        <Row label="Show hand camera" hint="A small live window (top right) showing your hand skeleton while the camera is on. Tap it to resize.">
+          <Switch
+            label="Show hand camera"
+            checked={settings.showHandCam}
+            onChange={(v) => updateSettings({ showHandCam: v })}
+          />
+        </Row>
         <Row label="Preferred hand" hint="Gestures from the other hand are ignored.">
           <select
             aria-label="Preferred hand"

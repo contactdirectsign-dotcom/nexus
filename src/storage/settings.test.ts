@@ -47,6 +47,11 @@ describe('sanitizeSettings', () => {
     expect(s.mappings.pause).toBeNull(); // explicit disable is kept
   });
 
+  it('validates the hand camera setting', () => {
+    expect(sanitizeSettings({ showHandCam: false }).showHandCam).toBe(false);
+    expect(sanitizeSettings({ showHandCam: 'no' }).showHandCam).toBe(true);
+  });
+
   it('never produces two actions with the same gesture', () => {
     const s = sanitizeSettings({ mappings: { select: 'swipe-right', back: 'swipe-right' } });
     const assigned = Object.values(s.mappings).filter((g) => g !== null);

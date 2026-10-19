@@ -2,6 +2,7 @@ import type { HandLandmarker } from '@mediapipe/tasks-vision';
 import { useSyncExternalStore } from 'react';
 import type { ActionId } from './definitions';
 import type { Landmarks } from './landmarks';
+import { LandmarkSmoother } from './smoothing';
 import type { PoseId } from './recognizer';
 import {
   GestureTracker,
@@ -23,7 +24,7 @@ const WASM_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPI
 const MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 
-const ACTIVE_INTERVAL_MS = 55; // about 18 frames per second: plenty for gestures, gentle on batteries
+const ACTIVE_INTERVAL_MS = 40; // about 25 frames per second: smooth skeleton, still gentle on batteries
 const PAUSED_INTERVAL_MS = 250; // while paused we only watch for the "resume" gesture
 
 export type EngineStatus =
@@ -99,6 +100,8 @@ class GestureEngine {
   private frameListeners = new Set<FrameListener>();
 
   private tracker = new GestureTracker();
+  // Separate smoothers for the on-screen skeleton (one per hand slot) so it does not shake.
+  private displaySmoothers = [new LandmarkSmoother(0.35, 0.9), new LandmarkSmoother(0.35, 0.9)];
   private landmarker: HandLandmarker | null = null;
   private loading: Promise<void> | null = null;
   private numHands = 1;
@@ -340,12 +343,9 @@ class GestureEngine {
 
         const events = this.tracker.update(now, hands);
         this.failures = 0;
-        this.frameListeners.forEach((l) =>
-          l(
-            hands.map((h) => h.landmarks),
-            { width: video.videoWidth, height: video.videoHeight },
-          ),
-        );
+        if (hands.length === 0) this.displaySmoothers.forEach((d) => d.reset());
+        const display = hands.slice(0, 2).map((h, i) => this.displaySmoothers[i].apply(now, h.landmarks));
+        this.frameListeners.forEach((l) => l(display, { width: video.videoWidth, height: video.videoHeight }));
         this.patch(this.trackerFields());
         for (const e of events) {
           this.patch({ lastEvent: e });

@@ -1,5 +1,6 @@
 import type { GestureId } from './definitions';
 import { palmCenter, type Landmarks } from './landmarks';
+import { LandmarkSmoother } from './smoothing';
 import { classifyPose, type PoseId } from './recognizer';
 
 /**
@@ -51,23 +52,23 @@ export interface TrackerConfig {
 
 /** How long each pose must be held before it fires (ms, at sensitivity 0.5). */
 export const POSE_HOLD_MS = {
-  'open-palm': 900, // long on purpose: an open hand is also how you start a swipe
-  'closed-fist': 700,
-  pointing: 450,
-  'two-finger': 450,
-  pinch: 350,
+  'open-palm': 1200, // long on purpose: an open hand is also how you start a swipe
+  'closed-fist': 900,
+  pointing: 600,
+  'two-finger': 600,
+  pinch: 450,
 } as const;
 
 const LOST_MS = 300;
-const SWIPE_WINDOW_MS = 350;
-const MIN_SWIPE_MS = 100;
-const MIN_SWIPE_SPEED = 0.5; // frame-widths per second
-const COOLDOWN_MS = 700;
-const OPPOSITE_BLOCK_MS = 1100;
+const SWIPE_WINDOW_MS = 500;
+const MIN_SWIPE_MS = 150;
+const MIN_SWIPE_SPEED = 0.3; // frame-widths per second (calm, deliberate swipes count)
+const COOLDOWN_MS = 1000;
+const OPPOSITE_BLOCK_MS = 1500;
 const PINCH_TAP_MIN_MS = 80;
 const STILL_WINDOW_MS = 250;
 const STILL_MAX_MOVE = 0.06;
-const POSE_SWITCH_FRAMES = 2;
+const POSE_SWITCH_FRAMES = 3;
 
 type SwipeId = 'swipe-left' | 'swipe-right' | 'swipe-up' | 'swipe-down';
 const OPPOSITE: Record<SwipeId, SwipeId> = {
@@ -117,6 +118,7 @@ export class GestureTracker {
   private pendingCount = 0;
 
   private samples: Sample[] = [];
+  private smoother = new LandmarkSmoother();
   private lastSeen = Number.NEGATIVE_INFINITY;
   private cooldownUntil = 0;
   private lastSwipe: { gesture: SwipeId; t: number } | null = null;
@@ -152,7 +154,8 @@ export class GestureTracker {
     this.lastSeen = t;
 
     const sens = this.cfg.sensitivity;
-    const { pose: rawPose, confidence } = classifyPose(hand.landmarks, {
+    const landmarks = this.smoother.apply(t, hand.landmarks);
+    const { pose: rawPose, confidence } = classifyPose(landmarks, {
       aspect: this.cfg.aspect,
       sensitivity: sens,
     });
@@ -160,9 +163,9 @@ export class GestureTracker {
     const observed: PoseId = confidence >= minConfidence ? rawPose : 'none';
 
     // Movement history of the palm centre
-    const c = palmCenter(hand.landmarks);
+    const c = palmCenter(landmarks);
     this.samples.push({ t, x: this.cfg.mirror ? 1 - c.x : c.x, y: c.y });
-    this.samples = this.samples.filter((s) => t - s.t <= 600);
+    this.samples = this.samples.filter((s) => t - s.t <= 800);
 
     // Debounce: a new pose must be seen in consecutive frames before we believe it.
     if (observed === this.candidate) {
@@ -290,5 +293,6 @@ export class GestureTracker {
     this.pendingCount = 0;
     this.samples = [];
     this.lastSwipe = null;
+    this.smoother.reset();
   }
 }

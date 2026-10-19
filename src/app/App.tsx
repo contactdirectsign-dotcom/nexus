@@ -5,7 +5,7 @@ import { useSettings } from '../storage/settings';
 import { ErrorBoundary } from './ErrorBoundary';
 import { BottomNav, SideNav } from './Nav';
 import { TopBar } from './TopBar';
-import { GestureHud } from './GestureHud';
+import { HandCam } from './HandCam';
 import { useGestureControl } from './useGestureControl';
 import { Dashboard } from '../modules/dashboard/Dashboard';
 
@@ -65,9 +65,9 @@ export function App() {
             <Suspense fallback={<p className="text-sm text-nx-muted" role="status">Loading…</p>}>
               <motion.div
                 key={safeRoute}
-                initial={settings.reducedEffects ? false : { opacity: 0, y: 8 }}
+                initial={settings.reducedEffects ? false : { opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: settings.reducedEffects ? 0 : 0.22 }}
+                transition={{ duration: settings.reducedEffects ? 0 : 0.4, ease: 'easeOut' }}
               >
                 <View route={safeRoute} navigate={navigate} />
               </motion.div>
@@ -75,7 +75,7 @@ export function App() {
           </ErrorBoundary>
         </main>
       </div>
-      <GestureHud hidden={safeRoute === 'setup'} />
+      <HandCam hidden={safeRoute === 'setup'} />
       <BottomNav route={safeRoute} onNavigate={navigate} />
     </div>
   );

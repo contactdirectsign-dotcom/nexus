@@ -6,6 +6,8 @@ import type { Route } from '../lib/useHashRoute';
 import { getSettings, useSettings } from '../storage/settings';
 import { NAV_ITEMS } from './navigation';
 
+const ACTION_GAP_MS = 900;
+
 /**
  * Connects the camera engine to the app:
  *  - keeps engine settings (sensitivity, hand) in sync,
@@ -17,6 +19,7 @@ export function useGestureControl(route: Route, navigate: (r: Route) => void): v
   const settings = useSettings();
   const routeRef = useRef(route);
   routeRef.current = route;
+  const lastActionAt = useRef(0);
 
   useEffect(() => {
     engine.setConfig({ sensitivity: settings.sensitivity, hand: settings.hand });
@@ -74,7 +77,13 @@ export function useGestureControl(route: Route, navigate: (r: Route) => void): v
           return;
         }
         if (status === 'paused') return; // while paused, only the pause gesture works
-        if (runAction(action.id)) engine.reportAction(action.id);
+        // One calm action at a time: a swipe must never skip several panels.
+        const now = performance.now();
+        if (now - lastActionAt.current < ACTION_GAP_MS) return;
+        if (runAction(action.id)) {
+          lastActionAt.current = now;
+          engine.reportAction(action.id);
+        }
       }),
     [],
   );
