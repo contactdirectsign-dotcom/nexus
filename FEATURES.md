@@ -18,9 +18,10 @@ Legend: [x] built, [ ] not built. "Verified" says what was actually checked.
 - [x] First-time setup wizard, 7 stages: welcome, camera, hand choice, calibration (live skeleton preview), gesture assignment, practice, finish. Repeatable from Settings
 - [x] Built-in gestures: open palm, closed fist, pointing, two fingers, pinch, swipe left/right/up/down, pinch-and-release
 - [x] Reusable gesture-to-action mapping (8 actions), changeable any time in Settings
-- [x] Safety rules: dwell time for poses, fires once then must release, 700 ms cooldown, 2-frame debounce, swipes from movement only, "return" motion after a swipe ignored, hand-lost handling, sensitivity slider
+- [x] Safety rules: short dwell time for poses (fist 0.5 s, pinch 0.25 s, open palm 0.75 s at medium sensitivity), fires once then must release, 450 ms cooldown, 2-frame debounce, swipes from movement only, "return" motion after a swipe ignored, hand-lost handling, sensitivity slider
 - [x] Pause/resume (low-power watching for the pause gesture only), Stop, always-visible red camera indicator, on-screen gesture readout
 - [x] Camera released when the tab is hidden and when stopped; auto-restart only if the browser already remembers permission
+- [x] Hand camera window (top right): live skeleton with per-finger colours, glow and filled palm; drag it anywhere by touch (position remembered), tap to resize, double-tap the grip bar to return to the corner, hide in Settings
 - [x] Touch fallback everywhere (nothing requires gestures)
 - [ ] Custom recorded gesture templates (deliberately not built: a few examples cannot train a reliable recogniser; built-in landmark gestures only)
 - [ ] True two-hand gestures ("Both hands" currently means either hand can control)
@@ -42,6 +43,7 @@ Legend: [x] built, [ ] not built. "Verified" says what was actually checked.
 | Settings / routing / time logic tests | **Passed** (Bun, here) |
 | App bundles without syntax or import errors | **Passed** (esbuild, here) |
 | Phase 2 `tsc` type check, Vitest component tests, `vite build` | **Not yet run** (first run is in Codespaces / GitHub) |
+| Hand-camera drag/resize and new skeleton drawing | **Bundles; not yet seen on a real phone** |
 | Real camera + MediaPipe on a phone (recognition accuracy, thresholds, left/right label) | **Not tested.** Thresholds were tuned on synthetic hands only and will need adjusting with real use |
 
 ## Known limitations

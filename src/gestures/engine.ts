@@ -24,7 +24,7 @@ const WASM_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPI
 const MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 
-const ACTIVE_INTERVAL_MS = 40; // about 25 frames per second: smooth skeleton, still gentle on batteries
+const ACTIVE_INTERVAL_MS = 33; // about 30 frames per second: responsive skeleton and gestures
 const PAUSED_INTERVAL_MS = 250; // while paused we only watch for the "resume" gesture
 
 export type EngineStatus =
@@ -101,7 +101,7 @@ class GestureEngine {
 
   private tracker = new GestureTracker();
   // Separate smoothers for the on-screen skeleton (one per hand slot) so it does not shake.
-  private displaySmoothers = [new LandmarkSmoother(0.35, 0.9), new LandmarkSmoother(0.35, 0.9)];
+  private displaySmoothers = [new LandmarkSmoother(0.5, 0.95), new LandmarkSmoother(0.5, 0.95)];
   private landmarker: HandLandmarker | null = null;
   private loading: Promise<void> | null = null;
   private numHands = 1;

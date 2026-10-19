@@ -6,7 +6,7 @@ import type { Route } from '../lib/useHashRoute';
 import { getSettings, useSettings } from '../storage/settings';
 import { NAV_ITEMS } from './navigation';
 
-const ACTION_GAP_MS = 900;
+const ACTION_GAP_MS = 450;
 
 /**
  * Connects the camera engine to the app:

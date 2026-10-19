@@ -52,23 +52,23 @@ export interface TrackerConfig {
 
 /** How long each pose must be held before it fires (ms, at sensitivity 0.5). */
 export const POSE_HOLD_MS = {
-  'open-palm': 1200, // long on purpose: an open hand is also how you start a swipe
-  'closed-fist': 900,
-  pointing: 600,
-  'two-finger': 600,
-  pinch: 450,
+  'open-palm': 750, // longest on purpose: an open hand is also how you start a swipe
+  'closed-fist': 500,
+  pointing: 350,
+  'two-finger': 350,
+  pinch: 240,
 } as const;
 
 const LOST_MS = 300;
-const SWIPE_WINDOW_MS = 500;
-const MIN_SWIPE_MS = 150;
-const MIN_SWIPE_SPEED = 0.3; // frame-widths per second (calm, deliberate swipes count)
-const COOLDOWN_MS = 1000;
-const OPPOSITE_BLOCK_MS = 1500;
-const PINCH_TAP_MIN_MS = 80;
+const SWIPE_WINDOW_MS = 400;
+const MIN_SWIPE_MS = 90;
+const MIN_SWIPE_SPEED = 0.35; // frame-widths per second (calm, deliberate swipes count)
+const COOLDOWN_MS = 450;
+const OPPOSITE_BLOCK_MS = 1200;
+const PINCH_TAP_MIN_MS = 60;
 const STILL_WINDOW_MS = 250;
-const STILL_MAX_MOVE = 0.06;
-const POSE_SWITCH_FRAMES = 3;
+const STILL_MAX_MOVE = 0.08;
+const POSE_SWITCH_FRAMES = 2;
 
 type SwipeId = 'swipe-left' | 'swipe-right' | 'swipe-up' | 'swipe-down';
 const OPPOSITE: Record<SwipeId, SwipeId> = {
@@ -118,7 +118,7 @@ export class GestureTracker {
   private pendingCount = 0;
 
   private samples: Sample[] = [];
-  private smoother = new LandmarkSmoother();
+  private smoother = new LandmarkSmoother(0.4, 0.95);
   private lastSeen = Number.NEGATIVE_INFINITY;
   private cooldownUntil = 0;
   private lastSwipe: { gesture: SwipeId; t: number } | null = null;
@@ -258,7 +258,7 @@ export class GestureTracker {
     const dy = last.y - first.y;
     if (Math.hypot(dx, dy) / (dt / 1000) < MIN_SWIPE_SPEED) return null;
 
-    const distance = 0.3 - 0.16 * this.cfg.sensitivity; // fraction of frame width
+    const distance = 0.24 - 0.14 * this.cfg.sensitivity; // fraction of frame width
     const ax = Math.abs(dx);
     const ay = Math.abs(dy);
     if (ax >= distance && ax > 1.8 * ay) return dx > 0 ? 'swipe-right' : 'swipe-left';
