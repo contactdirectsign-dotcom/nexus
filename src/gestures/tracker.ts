@@ -63,13 +63,13 @@ export const POSE_HOLD_MS = {
 
 /** Floor for hold times so the fastest speed still ignores a hand that is merely passing through a pose. */
 const MIN_HOLD_MS = {
-  'open-palm': 350,
-  'closed-fist': 200,
-  pointing: 160,
-  'two-finger': 160,
-  pinch: 220,
+  'open-palm': 300,
+  'closed-fist': 160,
+  pointing: 120,
+  'two-finger': 120,
+  pinch: 220, // longer than a quick tap, so a tap stays a tap (pinch-release)
 } as const;
-const MIN_COOLDOWN_MS = 220;
+const MIN_COOLDOWN_MS = 160;
 
 const LOST_MS = 300;
 const SWIPE_WINDOW_MS = 400;
@@ -78,7 +78,7 @@ const MIN_SWIPE_SPEED = 0.35; // frame-widths per second (calm, deliberate swipe
 const COOLDOWN_MS = 500;
 const OPPOSITE_BLOCK_MS = 1200;
 /** After a swipe, movement is ignored for this long whatever the speed setting, so one swipe is never two. */
-const SWIPE_LOCK_MS = 600;
+const SWIPE_LOCK_MS = 450;
 const PINCH_TAP_MIN_MS = 60;
 const STILL_WINDOW_MS = 250;
 const STILL_MAX_MOVE = 0.08;
@@ -132,7 +132,7 @@ export class GestureTracker {
   private pendingCount = 0;
 
   private samples: Sample[] = [];
-  private smoother = new LandmarkSmoother(2.5, 25);
+  private smoother = new LandmarkSmoother(3, 35);
   private lastSeen = Number.NEGATIVE_INFINITY;
   private cooldownUntil = 0;
   private swipeLockUntil = 0;

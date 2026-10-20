@@ -8,7 +8,7 @@ import { getSettings, useSettings } from '../storage/settings';
 import { NAV_ITEMS } from './navigation';
 
 /** Pause between two app actions at the Calm speed; scaled down for faster speeds. */
-const BASE_ACTION_GAP_MS = 600;
+const BASE_ACTION_GAP_MS = 500;
 
 /**
  * Connects the camera engine to the app:
@@ -28,7 +28,7 @@ export function useGestureControl(route: Route, navigate: (r: Route) => void): v
   }, [settings.sensitivity, settings.hand, settings.gestureSpeed]);
 
   const gapRef = useRef(0);
-  gapRef.current = Math.max(150, BASE_ACTION_GAP_MS * speedFactor(settings.gestureSpeed));
+  gapRef.current = Math.max(110, BASE_ACTION_GAP_MS * speedFactor(settings.gestureSpeed));
 
   // Air cursor: your index finger becomes a pointer. Not used on the setup screen (it reads raw gestures).
   useEffect(() => (settings.airCursor && route !== 'setup' ? startAirPointer() : undefined), [settings.airCursor, route === 'setup']);

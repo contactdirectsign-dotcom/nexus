@@ -89,3 +89,25 @@ html[data-reduced='true'] *::after {
   outline-offset: 2px;
   box-shadow: 0 0 18px rgba(255, 45, 149, 0.55);
 }
+
+/* Click ripple of the air cursor. */
+@keyframes nx-ripple {
+  from { transform: translate(-50%, -50%) scale(0.35); opacity: 0.95; }
+  to { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
+}
+.nx-ripple {
+  position: absolute;
+  width: 46px;
+  height: 46px;
+  border-radius: 9999px;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 20px #ff2d95, inset 0 0 12px rgba(255, 45, 149, 0.6);
+  animation: nx-ripple 0.55s ease-out forwards;
+  pointer-events: none;
+}
+html[data-reduced='true'] .nx-ripple { display: none; }
+
+/* Gentle pulse used by the live indicator dot. */
+@keyframes nx-pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.nx-live { animation: nx-pulse-dot 1.6s ease-in-out infinite; }
+html[data-reduced='true'] .nx-live { animation: none; }

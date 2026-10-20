@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from 'react';
 import { AirCursorTracker, HIDDEN_CURSOR, type CursorEvent, type CursorMode, type CursorState } from './cursor';
 import { engine, type FrameMeta } from './engine';
 import type { Landmarks } from './landmarks';
@@ -164,14 +165,14 @@ function hide(): void {
   if (view.mode !== 'hidden') publish({ ...HIDDEN_CURSOR, hovering: false });
 }
 
-function onFrame(hands: readonly Landmarks[], _size: { width: number; height: number }, meta: FrameMeta): void {
-  const lm = hands[meta.selected];
+function onFrame(_hands: readonly Landmarks[], _size: { width: number; height: number }, meta: FrameMeta): void {
+  const lm = meta.raw;
   if (!running || engine.getSnapshot().status !== 'running' || !meta.handDetected || !lm) {
     hide();
     return;
   }
   tracker.setConfig({ aspect: meta.aspect });
-  const { state, events } = tracker.update(meta.t, lm, meta.pose);
+  const { state, events } = tracker.update(meta.t, lm);
   if (state.mode === 'hidden') {
     hide();
     return;
@@ -212,3 +213,12 @@ export function stopAirPointer(): void {
 }
 
 export type { CursorMode };
+
+/** Re-renders only when the cursor mode changes (hidden, point, pressed, scroll), not on every frame. */
+export function useAirCursorMode(): CursorMode {
+  return useSyncExternalStore(
+    (cb) => subscribeAirCursor(() => cb()),
+    () => view.mode,
+    () => 'hidden' as CursorMode,
+  );
+}

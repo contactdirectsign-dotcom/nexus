@@ -31,6 +31,17 @@ const CERTAINTY_SPAN = 0.3;
 
 const clamp01 = (v: number): number => Math.min(1, Math.max(0, v));
 
+/**
+ * Tip-to-wrist / middle-joint-to-wrist distance ratio for index, middle, ring and pinky.
+ * Above about 1 the finger is straight; below it is curled.
+ */
+export function fingerRatios(lm: Landmarks, aspect = 1): [number, number, number, number] {
+  const r = FINGERS.map(
+    (f) => dist(lm[f.tip], lm[LM.WRIST], aspect) / Math.max(1e-6, dist(lm[f.pip], lm[LM.WRIST], aspect)),
+  );
+  return [r[0], r[1], r[2], r[3]];
+}
+
 export interface ClassifyOptions {
   /** Video width / height. */
   aspect?: number;

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { HandView } from '../design/HandView';
+import { useAirCursorMode } from '../gestures/airPointer';
 import { ProgressBar } from '../design/ui';
 import { ACTIONS, getGesture } from '../gestures/definitions';
 import { useEngine } from '../gestures/engine';
@@ -42,6 +43,7 @@ function savePos(p: Pos | null): void {
 export function HandCam({ hidden }: { hidden?: boolean }) {
   const cam = useEngine();
   const settings = useSettings();
+  const mode = useAirCursorMode();
   const [big, setBig] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [pos, setPos] = useState<Pos | null>(loadPos);
@@ -123,11 +125,17 @@ export function HandCam({ hidden }: { hidden?: boolean }) {
   const active = cam.status === 'running' || cam.status === 'paused';
   if (!active || hidden || !settings.showHandCam) return null;
 
+  const cursorLabel =
+    settings.airCursor && mode === 'pressed'
+      ? 'Pinch · click'
+      : settings.airCursor && mode === 'scroll'
+        ? 'Two fingers · scroll'
+        : settings.airCursor && mode === 'point'
+          ? 'Pointing · cursor'
+          : null;
   const label = !cam.handDetected
-    ? 'No hand'
-    : cam.pose === 'none'
-      ? 'Hand seen'
-      : getGesture(cam.pose).label;
+    ? 'Show your hand'
+    : (cursorLabel ?? (cam.pose === 'none' ? 'Hand seen' : getGesture(cam.pose).label));
 
   const placement = pos ? { left: pos.x, top: pos.y } : { right: 12, top: 112 };
 
@@ -135,7 +143,9 @@ export function HandCam({ hidden }: { hidden?: boolean }) {
     <div
       ref={boxRef}
       style={{ ...placement, touchAction: 'none' }}
-      className={`nx-glass fixed z-30 select-none p-1 ${dragging ? '' : 'transition-[width] duration-300'} ${big ? 'w-52' : 'w-28'} ${dragging ? 'cursor-grabbing shadow-[0_0_24px_rgba(255,45,149,0.55)]' : 'cursor-grab'}`}
+      className={`nx-glass fixed z-30 select-none overflow-hidden rounded-2xl p-1.5 transition-[width,box-shadow,border-color] duration-300 ${big ? 'w-52' : 'w-32'} ${
+        dragging ? 'cursor-grabbing shadow-[0_0_28px_rgba(255,45,149,0.6)]' : 'cursor-grab'
+      } ${cam.handDetected && !dragging ? 'border-nx-pink/70 shadow-[0_0_18px_rgba(255,45,149,0.35)]' : ''}`}
       data-testid="hand-cam"
       role="group"
       aria-label="Hand camera. Drag to move, tap to resize."
@@ -152,7 +162,13 @@ export function HandCam({ hidden }: { hidden?: boolean }) {
       </div>
       <div className="mt-1 px-1 pb-0.5 text-[11px] leading-tight">
         <div className="flex items-center justify-between gap-1">
-          <span className="truncate font-medium">{label}</span>
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span
+              aria-hidden="true"
+              className={`h-1.5 w-1.5 shrink-0 rounded-full ${cam.handDetected ? 'bg-nx-ok' : 'bg-nx-warn nx-live'}`}
+            />
+            <span className="truncate font-medium">{label}</span>
+          </span>
           {cam.handDetected && cam.pose !== 'none' && (
             <span className="text-nx-muted">{Math.round(cam.confidence * 100)}%</span>
           )}

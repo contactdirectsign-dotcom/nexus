@@ -93,9 +93,9 @@ export type GestureSpeed = 'calm' | 'balanced' | 'quick' | 'instant';
 
 export const GESTURE_SPEEDS: ReadonlyArray<{ id: GestureSpeed; label: string; hint: string; factor: number }> = [
   { id: 'calm', label: 'Calm', hint: 'Slowest, fewest accidents', factor: 1 },
-  { id: 'balanced', label: 'Balanced', hint: 'A bit quicker', factor: 0.7 },
-  { id: 'quick', label: 'Quick', hint: 'Fast and still safe', factor: 0.45 },
-  { id: 'instant', label: 'Instant', hint: 'Fastest; may trigger by accident', factor: 0.25 },
+  { id: 'balanced', label: 'Balanced', hint: 'A bit quicker', factor: 0.6 },
+  { id: 'quick', label: 'Quick', hint: 'Fast and still safe', factor: 0.32 },
+  { id: 'instant', label: 'Instant', hint: 'Fastest; may trigger by accident', factor: 0.16 },
 ];
 
 export const DEFAULT_GESTURE_SPEED: GestureSpeed = 'quick';
@@ -105,5 +105,5 @@ export function isGestureSpeed(v: unknown): v is GestureSpeed {
 }
 
 export function speedFactor(speed: GestureSpeed): number {
-  return GESTURE_SPEEDS.find((s) => s.id === speed)?.factor ?? 0.45;
+  return GESTURE_SPEEDS.find((s) => s.id === speed)?.factor ?? 0.32;
 }

@@ -193,7 +193,7 @@ describe('gesture speed', () => {
   });
 
   it('even Instant needs a real hold (not a frame or two)', () => {
-    expect(fireTime('instant')).toBeGreaterThanOrEqual(200);
+    expect(fireTime('instant')).toBeGreaterThanOrEqual(150);
   });
 
   it('quick is well under a second for a fist', () => {

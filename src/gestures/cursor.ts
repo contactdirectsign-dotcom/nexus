@@ -1,10 +1,11 @@
 import { dist, LM, palmCenter, type Landmarks } from './landmarks';
-import type { PoseId } from './recognizer';
+import { fingerRatios } from './recognizer';
 
 /**
  * Air cursor: turns your index fingertip into a pointer that covers the whole screen.
  *
- *  - Point with your index finger to move the cursor.
+ *  - Point with your index finger to move the cursor. It appears the instant the index finger is up (judged here,
+ *    frame by frame, not from the slower, debounced gesture classifier).
  *  - Pinch thumb and index to press; keep pinching and move to drag; open to release.
  *  - Hold up two fingers and move up/down to scroll (or zoom, over the globe).
  *
@@ -64,6 +65,36 @@ const FREEZE_LOOKBACK_MS = 120;
 const FREEZE_TIMEOUT_MS = 700;
 const HIDE_GRACE_MS = 220;
 const DRAG_GAIN = 1.25;
+/** Look a little ahead on fast movement to hide the camera's own delay (seconds). Zero effect when slow. */
+const LEAD_S = 0.02;
+const LEAD_FROM_SPEED = 0.35;
+const LEAD_FULL_SPEED = 0.9;
+const INDEX_UP_RATIO = 0.95;
+const FINGER_UP_RATIO = 1.0;
+
+export type HandShape = 'point' | 'two' | 'none';
+
+/**
+ * What the hand is doing, for the cursor only (decided from one frame, no waiting):
+ *  - 'point': index finger up and the middle finger down, or a pinch closing in with some fingers up.
+ *  - 'two': index and middle up, ring down (scroll).
+ *  - 'none': open palm (swipe/pause hand), fist, or anything else.
+ */
+export function handShape(lm: Landmarks, aspect: number, approachRatio: number): HandShape {
+  if (lm.length < 21) return 'none';
+  const [index, middle, ring, pinky] = fingerRatios(lm, aspect);
+  const indexUp = index > INDEX_UP_RATIO;
+  const middleUp = middle > FINGER_UP_RATIO;
+  const ringUp = ring > FINGER_UP_RATIO;
+  const pinkyUp = pinky > FINGER_UP_RATIO;
+  if (indexUp && !middleUp) return 'point';
+  if (indexUp && middleUp && !ringUp) return 'two';
+  // "OK" style pinch: the index curls toward the thumb while other fingers stay up. A fist must not count.
+  const handSize = Math.max(1e-6, dist(lm[LM.WRIST], lm[LM.MIDDLE_MCP], aspect));
+  const pinch = dist(lm[LM.THUMB_TIP], lm[LM.INDEX_TIP], aspect) / handSize;
+  if (pinch < approachRatio && (middleUp || ringUp || pinkyUp) && !(indexUp && middleUp && ringUp && pinkyUp)) return 'point';
+  return 'none';
+}
 
 /** 2-D One Euro filter. */
 class Euro2D {
@@ -82,6 +113,11 @@ class Euro2D {
 
   reset(): void {
     this.has = false;
+  }
+
+  /** Smoothed speed in screen fractions per second. */
+  speed(): { x: number; y: number } {
+    return { x: this.vx, y: this.vy };
   }
 
   apply(t: number, x: number, y: number): { x: number; y: number } {
@@ -115,7 +151,7 @@ interface Sample {
 
 export class AirCursorTracker {
   private cfg: CursorConfig;
-  private filter = new Euro2D(1.4, 7);
+  private filter = new Euro2D(1.6, 9, 4);
   private history: Sample[] = [];
   private lastEligible = Number.NEGATIVE_INFINITY;
   private frozen: { x: number; y: number; since: number } | null = null;
@@ -157,7 +193,7 @@ export class AirCursorTracker {
     return { x: mirror ? 1 - sx : sx, y: clamp01((py - marginY) / (1 - 2 * marginY)) };
   }
 
-  update(t: number, lm: Landmarks, pose: PoseId): { state: CursorState; events: CursorEvent[] } {
+  update(t: number, lm: Landmarks): { state: CursorState; events: CursorEvent[] } {
     const events: CursorEvent[] = [];
     if (lm.length < 21) {
       return { state: this.state, events: this.lost() };
@@ -168,7 +204,8 @@ export class AirCursorTracker {
     const ratio = dist(lm[LM.THUMB_TIP], lm[LM.INDEX_TIP], aspect) / handSize;
     const closing = clamp01((this.cfg.approachRatio - ratio) / (this.cfg.approachRatio - this.cfg.pressRatio));
 
-    const eligible = pose === 'pointing' || pose === 'pinch' || pose === 'two-finger' || this.pressed;
+    const shape = handShape(lm, aspect, this.cfg.approachRatio);
+    const eligible = shape !== 'none' || this.pressed;
     if (eligible) this.lastEligible = t;
     if (!eligible && t - this.lastEligible > HIDE_GRACE_MS) {
       return { state: this.state.mode === 'hidden' ? this.state : this.hideState(events), events };
@@ -201,7 +238,9 @@ export class AirCursorTracker {
         y = clamp01(a.y + (now.y - start.y) * DRAG_GAIN);
       }
     } else {
-      if (pose !== 'two-finger') {
+      if (shape === 'two') {
+        this.frozen = null; // scrolling: never keep a stale aim point from a half-closed pinch
+      } else {
         // Freeze position when the hand starts closing for a click.
         if (this.frozen === null && ratio < this.cfg.approachRatio) {
           const back = this.history.find((s) => t - s.t <= FREEZE_LOOKBACK_MS) ?? this.history[0];
@@ -226,12 +265,20 @@ export class AirCursorTracker {
 
     // Two-finger scroll: report vertical fingertip movement.
     let scrollDy = 0;
-    const scrolling = pose === 'two-finger' && !this.pressed;
+    const scrolling = shape === 'two' && !this.pressed;
     if (scrolling) {
       if (this.lastRawY !== null) scrollDy = smooth.y - this.lastRawY;
       this.lastRawY = smooth.y;
     } else {
       this.lastRawY = null;
+    }
+
+    if (!this.pressed && !this.frozen) {
+      const v = this.filter.speed();
+      const speed = Math.hypot(v.x, v.y);
+      const k = clamp01((speed - LEAD_FROM_SPEED) / (LEAD_FULL_SPEED - LEAD_FROM_SPEED));
+      x = clamp01(x + v.x * LEAD_S * k);
+      y = clamp01(y + v.y * LEAD_S * k);
     }
 
     this.last = { x, y };

@@ -75,6 +75,8 @@ export interface FrameMeta {
   handDetected: boolean;
   /** Index (in `hands`) of the hand that controls NEXUS, or -1. */
   selected: number;
+  /** The controlling hand exactly as the camera model reported it (not smoothed), for the air cursor's own filter. */
+  raw: Landmarks | null;
   aspect: number;
 }
 
@@ -121,7 +123,7 @@ class GestureEngine {
 
   private tracker = new GestureTracker();
   // Separate smoothers for the on-screen skeleton (one per hand slot) so it does not shake.
-  private displaySmoothers = [new LandmarkSmoother(3.5, 30), new LandmarkSmoother(3.5, 30)];
+  private displaySmoothers = [new LandmarkSmoother(4, 40), new LandmarkSmoother(4, 40)];
   private landmarker: HandLandmarker | null = null;
   private loading: Promise<void> | null = null;
   private numHands = 1;
@@ -240,7 +242,7 @@ class GestureEngine {
       throw new DOMException('Camera API unavailable', 'SecurityError');
     }
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } },
+      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 60 } },
       audio: false,
     });
     this.stream = stream;
@@ -392,11 +394,13 @@ class GestureEngine {
         if (hands.length === 0) this.displaySmoothers.forEach((d) => d.reset());
         const display = hands.slice(0, 2).map((h, i) => this.displaySmoothers[i].apply(now, h.landmarks));
         const tracked = this.tracker.getState();
+        const sel = this.tracker.pickIndex(hands);
         const meta: FrameMeta = {
           t: now,
           pose: tracked.pose,
           handDetected: tracked.handDetected,
-          selected: this.tracker.pickIndex(hands),
+          selected: sel,
+          raw: sel >= 0 ? hands[sel].landmarks : null,
           aspect: video.videoHeight > 0 ? video.videoWidth / video.videoHeight : 4 / 3,
         };
         this.frameListeners.forEach((l) => l(display, { width: video.videoWidth, height: video.videoHeight }, meta));
@@ -428,10 +432,11 @@ class GestureEngine {
     return {
       handDetected: s.handDetected,
       pose: s.pose,
-      confidence: Math.round(s.confidence * 100) / 100,
+      // Coarse steps on purpose: every change re-renders the screen, and camera frames arrive 30-60 times a second.
+      confidence: Math.round(s.confidence * 10) / 10,
       holdProgress: Math.round(s.holdProgress * 10) / 10,
       userHand: s.userHand,
-      detectScore: Math.round(s.detectScore * 100) / 100,
+      detectScore: Math.round(s.detectScore * 10) / 10,
     };
   }
 
