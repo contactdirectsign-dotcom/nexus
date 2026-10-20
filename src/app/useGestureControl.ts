@@ -1,12 +1,13 @@
 import { useEffect, useRef } from 'react';
 import { registerActionHandler, runAction } from '../gestures/actionRegistry';
-import { ACTIONS } from '../gestures/definitions';
+import { ACTIONS, speedFactor } from '../gestures/definitions';
 import { engine } from '../gestures/engine';
 import type { Route } from '../lib/useHashRoute';
 import { getSettings, useSettings } from '../storage/settings';
 import { NAV_ITEMS } from './navigation';
 
-const ACTION_GAP_MS = 450;
+/** Pause between two app actions at the Calm speed; scaled down for faster speeds. */
+const BASE_ACTION_GAP_MS = 600;
 
 /**
  * Connects the camera engine to the app:
@@ -22,8 +23,11 @@ export function useGestureControl(route: Route, navigate: (r: Route) => void): v
   const lastActionAt = useRef(0);
 
   useEffect(() => {
-    engine.setConfig({ sensitivity: settings.sensitivity, hand: settings.hand });
-  }, [settings.sensitivity, settings.hand]);
+    engine.setConfig({ sensitivity: settings.sensitivity, hand: settings.hand, speed: settings.gestureSpeed });
+  }, [settings.sensitivity, settings.hand, settings.gestureSpeed]);
+
+  const gapRef = useRef(0);
+  gapRef.current = Math.max(150, BASE_ACTION_GAP_MS * speedFactor(settings.gestureSpeed));
 
   // Default behaviour of each action. Screens can register their own handlers on top (later phases).
   useEffect(() => {
@@ -79,7 +83,7 @@ export function useGestureControl(route: Route, navigate: (r: Route) => void): v
         if (status === 'paused') return; // while paused, only the pause gesture works
         // One calm action at a time: a swipe must never skip several panels.
         const now = performance.now();
-        if (now - lastActionAt.current < ACTION_GAP_MS) return;
+        if (now - lastActionAt.current < gapRef.current) return;
         if (runAction(action.id)) {
           lastActionAt.current = now;
           engine.reportAction(action.id);

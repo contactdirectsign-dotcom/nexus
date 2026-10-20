@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { Badge, Button, Panel, SettingRow as Row, selectClass } from '../../design/ui';
+import { GESTURE_SPEEDS, type GestureSpeed } from '../../gestures/definitions';
 import { engine, useEngine } from '../../gestures/engine';
+import { setNewsPlace } from '../../lib/newsContext';
 import { go } from '../../lib/useHashRoute';
+import { deleteEventsDatabase } from '../calendar/eventsRepo';
+import { reloadFavorites } from '../../storage/favorites';
 import {
   eraseAllLocalData,
   resetSettings,
@@ -131,6 +135,23 @@ export function Settings() {
           </select>
         </Row>
         <Row
+          label="Gesture speed"
+          hint="How quickly a gesture counts. Quick is the default; Instant reacts fastest but can trigger by accident."
+        >
+          <select
+            aria-label="Gesture speed"
+            className={selectClass}
+            value={settings.gestureSpeed}
+            onChange={(e) => updateSettings({ gestureSpeed: e.target.value as GestureSpeed })}
+          >
+            {GESTURE_SPEEDS.map((sp) => (
+              <option key={sp.id} value={sp.id}>
+                {sp.label} – {sp.hint}
+              </option>
+            ))}
+          </select>
+        </Row>
+        <Row
           label={`Sensitivity: ${Math.round(settings.sensitivity * 100)}%`}
           hint="Lower means fewer accidental triggers; higher reacts sooner and to smaller movements."
         >
@@ -179,6 +200,9 @@ export function Settings() {
                 onClick={() => {
                   engine.stop();
                   eraseAllLocalData();
+                  reloadFavorites();
+                  setNewsPlace(null);
+                  void deleteEventsDatabase();
                   setConfirmErase(false);
                 }}
               >

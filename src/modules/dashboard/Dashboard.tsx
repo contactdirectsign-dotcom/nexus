@@ -32,15 +32,15 @@ export function Dashboard({ onNavigate }: { onNavigate: (r: Route) => void }) {
         title="World"
         glow
         className="lg:col-span-2"
-        action={<Badge tone="warn">Interactive Earth: coming in Phase 3</Badge>}
+        action={<Badge tone="ok">Phase 3</Badge>}
       >
         <div className="flex flex-col items-center gap-5 sm:flex-row">
           <GlobeArt />
           <div className="flex flex-col items-start gap-3">
             <p className="font-display text-2xl font-semibold">Explore the planet</p>
             <p className="text-sm text-nx-muted">
-              World will bring a real 3D Earth, city search, world clocks, a calendar, timers and stopwatch.
-              The Earth itself is not built yet; the picture here is only an illustration.
+              A 3D Earth with real country shapes, city search with local time and weather, world clocks, a calendar,
+              a timer and a stopwatch. The picture here is only an illustration; open World for the real globe.
             </p>
             <Button variant="primary" onClick={() => onNavigate('world')}>
               Open World

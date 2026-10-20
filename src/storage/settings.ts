@@ -1,8 +1,11 @@
 import { useSyncExternalStore } from 'react';
 import {
   ACTIONS,
+  DEFAULT_GESTURE_SPEED,
   DEFAULT_MAPPINGS,
   isGestureId,
+  isGestureSpeed,
+  type GestureSpeed,
   type GestureMappings,
 } from '../gestures/definitions';
 
@@ -21,6 +24,8 @@ export interface Settings {
   gestureEnabled: boolean;
   /** 0 (strict, fewer accidental triggers) to 1 (sensitive). */
   sensitivity: number;
+  /** How quickly gestures react: calm, balanced, quick or instant. */
+  gestureSpeed: GestureSpeed;
   /** Show the small live hand-tracking camera in the top right while the camera is on. */
   showHandCam: boolean;
   mappings: GestureMappings;
@@ -36,6 +41,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reducedEffects: false,
   gestureEnabled: false,
   sensitivity: 0.5,
+  gestureSpeed: DEFAULT_GESTURE_SPEED,
   showHandCam: true,
   mappings: DEFAULT_MAPPINGS,
 };
@@ -87,6 +93,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     reducedEffects: typeof r.reducedEffects === 'boolean' ? r.reducedEffects : d.reducedEffects,
     gestureEnabled: typeof r.gestureEnabled === 'boolean' ? r.gestureEnabled : d.gestureEnabled,
     sensitivity: Math.min(1, Math.max(0, sens)),
+    gestureSpeed: isGestureSpeed(r.gestureSpeed) ? r.gestureSpeed : d.gestureSpeed,
     showHandCam: typeof r.showHandCam === 'boolean' ? r.showHandCam : d.showHandCam,
     mappings,
   };

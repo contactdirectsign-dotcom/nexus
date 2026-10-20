@@ -1,43 +1,55 @@
 import type { Landmarks, Point } from './landmarks';
 
-const clamp01 = (v: number): number => Math.min(1, Math.max(0, v));
-
 /**
- * Adaptive smoothing for hand landmarks (an exponential moving average whose strength depends on each
- * point's speed). A still hand is smoothed strongly, which removes the camera jitter that makes poses flicker and the
- * skeleton shake. A fast-moving hand is smoothed lightly so swipes still feel responsive.
+ * One Euro filter per landmark (Casiez et al., 2012): the standard low-lag smoother for tracked hands.
+ * A still hand is smoothed strongly (no jitter, steady poses); the more a point moves, the less it is
+ * smoothed, so quick swipes and finger curls are followed almost without delay.
+ *
+ *   cutoff = minCutoff + beta * speed        (speed in frame-widths per second)
+ *
+ * Higher minCutoff = less smoothing when still. Higher beta = follows fast movement more closely.
  */
 export class LandmarkSmoother {
   private prev: Point[] | null = null;
+  private vel: Array<{ x: number; y: number }> = [];
   private prevT = 0;
 
   constructor(
-    private readonly minAlpha = 0.25,
-    private readonly maxAlpha = 0.85,
+    private readonly minCutoff = 2,
+    private readonly beta = 20,
+    private readonly dCutoff = 1.5,
   ) {}
 
   reset(): void {
     this.prev = null;
+    this.vel = [];
   }
 
   apply(t: number, lm: Landmarks): Landmarks {
     const prev = this.prev;
-    if (!prev || prev.length !== lm.length || t - this.prevT > 500) {
+    if (!prev || prev.length !== lm.length || t - this.prevT > 500 || t <= this.prevT) {
       this.prev = lm.map((p) => ({ x: p.x, y: p.y, z: p.z }));
+      this.vel = lm.map(() => ({ x: 0, y: 0 }));
       this.prevT = t;
       return this.prev;
     }
-    const dt = Math.max(1, t - this.prevT) / 1000;
-    // Each landmark is smoothed by its own speed (frame-widths per second): a jittering fingertip is
-    // smoothed hard, but a finger that really moves (curling into a pinch) is followed quickly.
+    const dt = Math.max(0.001, (t - this.prevT) / 1000);
+    const alphaFor = (cutoff: number): number => {
+      const tau = 1 / (2 * Math.PI * cutoff);
+      return 1 / (1 + tau / dt);
+    };
+    const aD = alphaFor(this.dCutoff);
+
     const next = lm.map((p, i) => {
-      const speed = Math.hypot(p.x - prev[i].x, p.y - prev[i].y) / dt;
-      const alpha = this.minAlpha + (this.maxAlpha - this.minAlpha) * clamp01(speed / 1.2);
-      return {
-        x: prev[i].x + alpha * (p.x - prev[i].x),
-        y: prev[i].y + alpha * (p.y - prev[i].y),
-        z: p.z,
-      };
+      const last = prev[i];
+      // Smoothed speed of this point
+      const rawVx = (p.x - last.x) / dt;
+      const rawVy = (p.y - last.y) / dt;
+      const v = this.vel[i];
+      v.x += aD * (rawVx - v.x);
+      v.y += aD * (rawVy - v.y);
+      const a = alphaFor(this.minCutoff + this.beta * Math.hypot(v.x, v.y));
+      return { x: last.x + a * (p.x - last.x), y: last.y + a * (p.y - last.y), z: p.z };
     });
     this.prev = next;
     this.prevT = t;

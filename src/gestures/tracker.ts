@@ -1,4 +1,4 @@
-import type { GestureId } from './definitions';
+import { speedFactor, type GestureId, type GestureSpeed } from './definitions';
 import { palmCenter, type Landmarks } from './landmarks';
 import { LandmarkSmoother } from './smoothing';
 import { classifyPose, type PoseId } from './recognizer';
@@ -46,6 +46,8 @@ export interface TrackerConfig {
   hand: HandPreference;
   /** Video width / height. */
   aspect: number;
+  /** How quickly gestures react (scales hold times, cooldown). */
+  speed: GestureSpeed;
   /** True for a front camera shown as a mirror. Makes "swipe right" mean the user's right. */
   mirror: boolean;
 }
@@ -59,12 +61,24 @@ export const POSE_HOLD_MS = {
   pinch: 240,
 } as const;
 
+/** Floor for hold times so the fastest speed still ignores a hand that is merely passing through a pose. */
+const MIN_HOLD_MS = {
+  'open-palm': 350,
+  'closed-fist': 200,
+  pointing: 160,
+  'two-finger': 160,
+  pinch: 220,
+} as const;
+const MIN_COOLDOWN_MS = 220;
+
 const LOST_MS = 300;
 const SWIPE_WINDOW_MS = 400;
 const MIN_SWIPE_MS = 90;
 const MIN_SWIPE_SPEED = 0.35; // frame-widths per second (calm, deliberate swipes count)
-const COOLDOWN_MS = 450;
+const COOLDOWN_MS = 500;
 const OPPOSITE_BLOCK_MS = 1200;
+/** After a swipe, movement is ignored for this long whatever the speed setting, so one swipe is never two. */
+const SWIPE_LOCK_MS = 600;
 const PINCH_TAP_MIN_MS = 60;
 const STILL_WINDOW_MS = 250;
 const STILL_MAX_MOVE = 0.08;
@@ -118,13 +132,14 @@ export class GestureTracker {
   private pendingCount = 0;
 
   private samples: Sample[] = [];
-  private smoother = new LandmarkSmoother(0.4, 0.95);
+  private smoother = new LandmarkSmoother(2.5, 25);
   private lastSeen = Number.NEGATIVE_INFINITY;
   private cooldownUntil = 0;
+  private swipeLockUntil = 0;
   private lastSwipe: { gesture: SwipeId; t: number } | null = null;
 
   constructor(config: Partial<TrackerConfig> = {}) {
-    this.cfg = { sensitivity: 0.5, hand: 'either', aspect: 1, mirror: true, ...config };
+    this.cfg = { sensitivity: 0.5, hand: 'either', speed: 'quick', aspect: 1, mirror: true, ...config };
   }
 
   setConfig(patch: Partial<TrackerConfig>): void {
@@ -166,6 +181,7 @@ export class GestureTracker {
     const c = palmCenter(landmarks);
     this.samples.push({ t, x: this.cfg.mirror ? 1 - c.x : c.x, y: c.y });
     this.samples = this.samples.filter((s) => t - s.t <= 800);
+    if (t < this.swipeLockUntil) this.samples = []; // motion right after a swipe is its tail, not a new swipe
 
     // Debounce: a new pose must be seen in consecutive frames before we believe it.
     if (observed === this.candidate) {
@@ -182,7 +198,7 @@ export class GestureTracker {
     }
 
     // Swipe: movement over time, only with an open hand, outside cooldown.
-    if (this.candidate === 'open-palm' && t >= this.cooldownUntil) {
+    if (this.candidate === 'open-palm' && t >= this.cooldownUntil && t >= this.swipeLockUntil) {
       const swipe = this.detectSwipe(t);
       if (swipe) {
         const blocked =
@@ -194,7 +210,8 @@ export class GestureTracker {
           this.lastSwipe = { gesture: swipe, t };
         }
         this.samples = [];
-        this.cooldownUntil = t + COOLDOWN_MS;
+        this.swipeLockUntil = t + SWIPE_LOCK_MS;
+        this.cooldownUntil = t + this.cooldownMs();
         this.fired = true; // a swipe must not also count as an "open palm" press
         this.holdSince = t;
       }
@@ -208,12 +225,12 @@ export class GestureTracker {
       if (this.fired) {
         holdProgress = 1;
       } else {
-        const holdMs = POSE_HOLD_MS[pose] * (1.5 - sens);
+        const holdMs = this.holdMs(pose);
         holdProgress = clamp01((t - this.holdSince) / holdMs);
         if (holdProgress >= 1 && t >= this.cooldownUntil) {
           events.push({ gesture: pose, confidence: this.candidateConf, t });
           this.fired = true;
-          this.cooldownUntil = t + COOLDOWN_MS;
+          this.cooldownUntil = t + this.cooldownMs();
         }
       }
     }
@@ -229,13 +246,24 @@ export class GestureTracker {
     return events;
   }
 
+  private cooldownMs(): number {
+    return Math.max(MIN_COOLDOWN_MS, COOLDOWN_MS * speedFactor(this.cfg.speed));
+  }
+
+  /** Adaptive dwell: clear, confident poses fire sooner; shaky or borderline ones wait longer. */
+  private holdMs(pose: Exclude<PoseId, 'none'>): number {
+    const base = POSE_HOLD_MS[pose] * (1.5 - this.cfg.sensitivity) * speedFactor(this.cfg.speed);
+    const confidenceScale = 1.25 - 0.5 * clamp01(this.candidateConf); // 0.75 (certain) .. 1.25 (borderline)
+    return Math.max(MIN_HOLD_MS[pose], base * confidenceScale);
+  }
+
   private switchPose(next: PoseId, conf: number, t: number, events: GestureEvent[]): void {
     // A quick pinch-and-release (shorter than the pinch dwell time) is its own gesture.
     if (this.candidate === 'pinch' && !this.fired) {
       const duration = t - this.candidateSince;
       if (duration >= PINCH_TAP_MIN_MS && t >= this.cooldownUntil) {
         events.push({ gesture: 'pinch-release', confidence: this.candidateConf, t });
-        this.cooldownUntil = t + COOLDOWN_MS;
+        this.cooldownUntil = t + this.cooldownMs();
       }
     }
     this.candidate = next;
@@ -292,6 +320,7 @@ export class GestureTracker {
     this.pending = null;
     this.pendingCount = 0;
     this.samples = [];
+    this.swipeLockUntil = 0;
     this.lastSwipe = null;
     this.smoother.reset();
   }

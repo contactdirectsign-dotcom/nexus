@@ -14,7 +14,7 @@ describe('static poses', () => {
 
   it('does not fire before the dwell time', () => {
     const t = new GestureTracker();
-    const events = run(t, frames(0, 600, () => OPEN));
+    const events = run(t, frames(0, 250, () => OPEN)); // below the shortest open-palm hold
     expect(events).toHaveLength(0);
   });
 
@@ -166,10 +166,53 @@ describe('hand preference', () => {
 
 describe('sensitivity', () => {
   it('higher sensitivity fires poses sooner', () => {
-    const strict = new GestureTracker({ sensitivity: 0 });
-    const eager = new GestureTracker({ sensitivity: 1 });
-    const list = frames(0, 700, () => FIST);
+    const strict = new GestureTracker({ sensitivity: 0, speed: 'calm' });
+    const eager = new GestureTracker({ sensitivity: 1, speed: 'calm' });
+    const list = frames(0, 400, () => FIST);
     expect(run(strict, list)).toHaveLength(0);
     expect(names(run(eager, list))).toEqual(['closed-fist']);
+  });
+});
+
+describe('gesture speed', () => {
+  const fireTime = (speed: 'calm' | 'balanced' | 'quick' | 'instant'): number => {
+    const t = new GestureTracker({ speed, sensitivity: 0.5 });
+    const events = run(t, frames(0, 3000, () => FIST, 10));
+    expect(names(events)).toEqual(['closed-fist']);
+    return events[0].t;
+  };
+
+  it('faster speeds fire the same pose sooner', () => {
+    const calm = fireTime('calm');
+    const balanced = fireTime('balanced');
+    const quick = fireTime('quick');
+    const instant = fireTime('instant');
+    expect(calm).toBeGreaterThan(balanced);
+    expect(balanced).toBeGreaterThan(quick);
+    expect(quick).toBeGreaterThanOrEqual(instant);
+  });
+
+  it('even Instant needs a real hold (not a frame or two)', () => {
+    expect(fireTime('instant')).toBeGreaterThanOrEqual(200);
+  });
+
+  it('quick is well under a second for a fist', () => {
+    expect(fireTime('quick')).toBeLessThan(600);
+  });
+
+  it('one swipe is never two, even at the fastest speed', () => {
+    const t = new GestureTracker({ speed: 'instant', sensitivity: 1 });
+    const list = frames(0, 1500, (ms) => ({ dx: 0.2 - Math.min(ms, 300) * (0.4 / 300) }), 33);
+    expect(names(run(t, list)).filter((n) => n.startsWith('swipe'))).toHaveLength(1);
+  });
+
+  it('repeated swipes in the same direction still work after a pause', () => {
+    const t = new GestureTracker({ speed: 'quick' });
+    const first = frames(0, 400, (ms) => ({ dx: 0.2 - Math.min(ms, 300) * (0.4 / 300) }), 33);
+    const back = frames(450, 1000, () => ({ dx: -0.2 }), 33); // hand rests where the swipe ended
+    const reset = frames(1033, 2400, (ms) => ({ dx: -0.2 + ((ms - 1000) / 1400) * 0.4 }), 33); // slow drift back: not a swipe
+    const second = frames(2433, 2900, (ms) => ({ dx: 0.2 - Math.min(ms - 2433, 300) * (0.4 / 300) }), 33);
+    const ev = names(run(t, [...first, ...back, ...reset, ...second])).filter((n) => n.startsWith('swipe'));
+    expect(ev.filter((n) => n === 'swipe-right').length).toBe(2);
   });
 });

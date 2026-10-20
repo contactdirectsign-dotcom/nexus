@@ -94,3 +94,15 @@ describe('settings store', () => {
     expect(getSettings()).toEqual(DEFAULT_SETTINGS);
   });
 });
+
+describe('gesture speed setting', () => {
+  it('defaults to quick and keeps valid stored values', () => {
+    expect(sanitizeSettings(null).gestureSpeed).toBe('quick');
+    expect(sanitizeSettings({ gestureSpeed: 'instant' }).gestureSpeed).toBe('instant');
+    expect(sanitizeSettings({ gestureSpeed: 'calm' }).gestureSpeed).toBe('calm');
+  });
+  it('replaces unknown values with the default', () => {
+    expect(sanitizeSettings({ gestureSpeed: 'warp' }).gestureSpeed).toBe('quick');
+    expect(sanitizeSettings({ gestureSpeed: 5 }).gestureSpeed).toBe('quick');
+  });
+});

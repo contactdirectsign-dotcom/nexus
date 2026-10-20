@@ -1,6 +1,6 @@
 import type { HandLandmarker } from '@mediapipe/tasks-vision';
 import { useSyncExternalStore } from 'react';
-import type { ActionId } from './definitions';
+import type { ActionId, GestureSpeed } from './definitions';
 import type { Landmarks } from './landmarks';
 import { LandmarkSmoother } from './smoothing';
 import type { PoseId } from './recognizer';
@@ -45,6 +45,10 @@ export interface EngineSnapshot {
   holdProgress: number;
   userHand: 'left' | 'right' | null;
   detectScore: number;
+  /** Hand-tracking frames per second (a low number explains sluggish gestures). */
+  fps: number;
+  /** Which processor runs the hand model. CPU is much slower than GPU. */
+  delegate: 'GPU' | 'CPU' | null;
   lastEvent: GestureEvent | null;
   lastAction: { id: ActionId; t: number } | null;
 }
@@ -58,6 +62,8 @@ const INITIAL: EngineSnapshot = {
   holdProgress: 0,
   userHand: null,
   detectScore: IDLE_STATE.detectScore,
+  fps: 0,
+  delegate: null,
   lastEvent: null,
   lastAction: null,
 };
@@ -101,7 +107,7 @@ class GestureEngine {
 
   private tracker = new GestureTracker();
   // Separate smoothers for the on-screen skeleton (one per hand slot) so it does not shake.
-  private displaySmoothers = [new LandmarkSmoother(0.5, 0.95), new LandmarkSmoother(0.5, 0.95)];
+  private displaySmoothers = [new LandmarkSmoother(3.5, 30), new LandmarkSmoother(3.5, 30)];
   private landmarker: HandLandmarker | null = null;
   private loading: Promise<void> | null = null;
   private numHands = 1;
@@ -109,6 +115,9 @@ class GestureEngine {
   private video: HTMLVideoElement | null = null;
   private stream: MediaStream | null = null;
   private timer: number | null = null;
+  private frameCb: number | null = null;
+  private lastFrameAt = 0;
+  private fpsEma = 0;
   private lastVideoTime = -1;
   private failures = 0;
   /** True while the user wants the camera on (used to resume after the tab was hidden). */
@@ -142,8 +151,8 @@ class GestureEngine {
   }
 
   // ---- configuration ----
-  setConfig(cfg: { sensitivity: number; hand: HandPreference }): void {
-    this.tracker.setConfig({ sensitivity: cfg.sensitivity, hand: cfg.hand });
+  setConfig(cfg: { sensitivity: number; hand: HandPreference; speed: GestureSpeed }): void {
+    this.tracker.setConfig({ sensitivity: cfg.sensitivity, hand: cfg.hand, speed: cfg.speed });
     const wanted = cfg.hand === 'either' ? 1 : 2;
     if (wanted !== this.numHands) {
       this.numHands = wanted;
@@ -302,8 +311,10 @@ class GestureEngine {
         });
       try {
         this.landmarker = await create('GPU');
+        this.patch({ delegate: 'GPU' });
       } catch {
         this.landmarker = await create('CPU');
+        this.patch({ delegate: 'CPU' });
       }
     })().finally(() => {
       this.loading = null;
@@ -313,7 +324,17 @@ class GestureEngine {
 
   private schedule(delay: number): void {
     this.clearTimer();
-    this.timer = window.setTimeout(this.tick, delay);
+    const v = this.video;
+    // Wake up exactly when the camera delivers a new frame (lowest delay). A short timer stays as a safety net.
+    if (delay > 0 && delay <= ACTIVE_INTERVAL_MS && v && typeof v.requestVideoFrameCallback === 'function') {
+      this.frameCb = v.requestVideoFrameCallback(() => {
+        this.frameCb = null;
+        this.tick();
+      });
+      this.timer = window.setTimeout(this.tick, 150);
+    } else {
+      this.timer = window.setTimeout(this.tick, delay);
+    }
   }
 
   private clearTimer(): void {
@@ -321,9 +342,14 @@ class GestureEngine {
       window.clearTimeout(this.timer);
       this.timer = null;
     }
+    if (this.frameCb !== null) {
+      this.video?.cancelVideoFrameCallback?.(this.frameCb);
+      this.frameCb = null;
+    }
   }
 
   private tick = (): void => {
+    this.clearTimer();
     const status = this.snap.status;
     if (status !== 'running' && status !== 'paused') return;
     const video = this.video;
@@ -341,12 +367,18 @@ class GestureEngine {
           return { landmarks, label, score: category?.score ?? 0 };
         });
 
+        if (this.lastFrameAt > 0) {
+          const inst = 1000 / Math.max(1, now - this.lastFrameAt);
+          this.fpsEma = this.fpsEma === 0 ? inst : this.fpsEma * 0.9 + inst * 0.1;
+        }
+        this.lastFrameAt = now;
+
         const events = this.tracker.update(now, hands);
         this.failures = 0;
         if (hands.length === 0) this.displaySmoothers.forEach((d) => d.reset());
         const display = hands.slice(0, 2).map((h, i) => this.displaySmoothers[i].apply(now, h.landmarks));
         this.frameListeners.forEach((l) => l(display, { width: video.videoWidth, height: video.videoHeight }));
-        this.patch(this.trackerFields());
+        this.patch({ ...this.trackerFields(), fps: Math.round(this.fpsEma) });
         for (const e of events) {
           this.patch({ lastEvent: e });
           this.eventListeners.forEach((l) => l(e));

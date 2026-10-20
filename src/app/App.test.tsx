@@ -27,7 +27,7 @@ describe('NEXUS shell', () => {
     render(<App />);
     const [nav] = screen.getAllByRole('navigation', { name: 'Main' });
     await user.click(within(nav).getByRole('button', { name: /world/i }));
-    expect(await screen.findByText(/World is not built yet/i)).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: 'Globe' })).toBeInTheDocument();
     await user.click(within(nav).getByRole('button', { name: /pulse/i }));
     expect(await screen.findByText(/No news source connected$/i)).toBeInTheDocument();
   });

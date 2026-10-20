@@ -153,6 +153,11 @@ export function HandCam({ hidden }: { hidden?: boolean }) {
             <span className="text-nx-muted">{Math.round(cam.confidence * 100)}%</span>
           )}
         </div>
+        <div className="text-[10px] text-nx-muted" data-testid="hand-cam-fps">
+          {cam.fps > 0 ? `${cam.fps} fps` : '… fps'}
+          {cam.delegate ? ` · ${cam.delegate}` : ''}
+          {cam.fps > 0 && cam.fps < 12 ? ' · slow' : ''}
+        </div>
         <ProgressBar value={cam.handDetected ? cam.holdProgress : 0} label="Hold progress" />
         <div className="mt-1 min-h-3 truncate text-nx-pink" aria-live="polite">
           {cam.status === 'paused' ? 'Paused' : toast ? `✓ ${toast}` : ''}

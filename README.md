@@ -4,7 +4,7 @@
 
 A personal, free, gesture-controlled app. Black-and-pink interface, built with React, TypeScript, Vite and Tailwind CSS, hosted free on GitHub Pages. No backend, no paid services.
 
-> **Status: Phase 2 (Gesture Lab).** App shell, dashboard, settings and camera hand-gesture control with a setup wizard. The 3D globe, calendar and news are **not built yet** and are labelled as such in the app.
+> **Status: Phase 3 (World).** App shell, gesture control with a draggable hand camera, and World: a 3D Earth, city search with local time and weather, world clock, calendar, timer and stopwatch. News (Pulse) is **not built yet** and is labelled as such in the app.
 
 ## Put it online for free (no installs needed)
 
@@ -35,7 +35,7 @@ npm run build      # production build into dist/
 src/
   app/          shell: App, TopBar, Nav, ErrorBoundary
   design/       reusable UI (Panel, Button, Badge, EmptyState), icons
-  modules/      dashboard, world, pulse, settings (one folder each)
+  modules/      dashboard, world (globe, clock, timer), calendar, pulse, settings (one folder each)
   gestures/     catalogue + mapping, pose recognizer, swipe/hold tracker, camera engine (MediaPipe)
   modules/setup first-time gesture setup wizard
   storage/      settings store (saved in the browser)
@@ -58,6 +58,11 @@ Everything is stored in your own browser. No account, no tracking. The camera is
 
 ## Dependencies
 
-react, react-dom, framer-motion, @mediapipe/tasks-vision 1.1.1 (runtime); vite, typescript, tailwindcss, vitest, jsdom, React Testing Library (development). Three.js joins in Phase 3.
+react, react-dom, framer-motion, @mediapipe/tasks-vision 1.1.1 (runtime); vite, typescript, tailwindcss, vitest, jsdom, React Testing Library (development). three, d3-geo, topojson-client and world-atlas (Phase 3 globe and map data).
+
+## Data sources and credits
+
+- Weather, time zone and city search: [Open-Meteo](https://open-meteo.com/) (free, no key, non-commercial use, CC BY 4.0).
+- Country shapes: Natural Earth (public domain) through the `world-atlas` package.
 
 See `FEATURES.md` for the feature and test checklist.
