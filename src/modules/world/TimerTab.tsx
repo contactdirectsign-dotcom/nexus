@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Badge, Button, Panel } from '../../design/ui';
+import { registerActionHandler } from '../../gestures/actionRegistry';
 import {
   formatDuration, loadStopwatch, loadTimer, saveStopwatch, saveTimer, swElapsed, swLap, swPause, swReset, swStart,
   timerFinished, timerPause, timerRemaining, timerReset, timerSetDuration, timerStart,
@@ -115,6 +116,40 @@ function Timer() {
     }
   }, [t.running]);
 
+  // Hands busy? Gestures work the timer while this tab is open: swipe up/down adds or removes a minute while it
+  // is not running, "select" starts/pauses, and "back" resets a timer that is not idle.
+  const tRef = useRef(t);
+  tRef.current = t;
+  useEffect(() => {
+    const idleNow = (s: TimerState) => !s.running && s.remainingMs === s.durationMs;
+    const adjust = (deltaMs: number) => () => {
+      const cur = tRef.current;
+      if (cur.running || !idleNow(cur)) return false;
+      update(timerSetDuration(Math.max(0, cur.durationMs + deltaMs)));
+      setRinging(false);
+      return true;
+    };
+    const offs = [
+      registerActionHandler('scroll-up', adjust(60000)),
+      registerActionHandler('scroll-down', adjust(-60000)),
+      registerActionHandler('select', () => {
+        const cur = tRef.current;
+        if (cur.durationMs === 0) return false;
+        setRinging(false);
+        update(cur.running ? timerPause(cur, Date.now()) : timerStart(cur, Date.now()));
+        return true;
+      }),
+      registerActionHandler('back', () => {
+        const cur = tRef.current;
+        if (idleNow(cur)) return false; // nothing to undo: let "back" do its normal job
+        setRinging(false);
+        update(timerReset(cur));
+        return true;
+      }),
+    ];
+    return () => offs.forEach((off) => off());
+  }, [update]);
+
   const total = t.durationMs;
   const h = Math.floor(total / 3600000);
   const m = Math.floor(total / 60000) % 60;
@@ -210,6 +245,7 @@ export function TimerTab() {
       <p className="text-xs text-nx-muted md:col-span-2">
         Honest limit: a web page cannot ring when it is closed or your phone is locked. The timer keeps correct time
         (it works from the clock, not from counting) and shows that it finished, with a beep, only while NEXUS is open.
+        With the camera on you can set it hands-free: point and pinch the buttons, or swipe up or down to add or remove a minute.
         Dependable background alarms would need a native Android app later.
       </p>
     </div>

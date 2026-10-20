@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { DashboardIcon, PulseIcon, SettingsIcon, WorldIcon } from '../design/icons';
+import { DashboardIcon, LabIcon, PulseIcon, SettingsIcon, WorldIcon } from '../design/icons';
 import type { Route } from '../lib/useHashRoute';
 
 export interface NavItem {
@@ -13,5 +13,6 @@ export const NAV_ITEMS: NavItem[] = [
   { route: 'dashboard', label: 'Dashboard', icon: <DashboardIcon /> },
   { route: 'world', label: 'World', icon: <WorldIcon /> },
   { route: 'pulse', label: 'Pulse', icon: <PulseIcon /> },
+  { route: 'lab', label: 'Lab', icon: <LabIcon /> },
   { route: 'settings', label: 'Settings', icon: <SettingsIcon /> },
 ];

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { registerActionHandler, runAction } from '../gestures/actionRegistry';
 import { ACTIONS, speedFactor } from '../gestures/definitions';
+import { startAirPointer } from '../gestures/airPointer';
 import { engine } from '../gestures/engine';
 import type { Route } from '../lib/useHashRoute';
 import { getSettings, useSettings } from '../storage/settings';
@@ -28,6 +29,9 @@ export function useGestureControl(route: Route, navigate: (r: Route) => void): v
 
   const gapRef = useRef(0);
   gapRef.current = Math.max(150, BASE_ACTION_GAP_MS * speedFactor(settings.gestureSpeed));
+
+  // Air cursor: your index finger becomes a pointer. Not used on the setup screen (it reads raw gestures).
+  useEffect(() => (settings.airCursor && route !== 'setup' ? startAirPointer() : undefined), [settings.airCursor, route === 'setup']);
 
   // Default behaviour of each action. Screens can register their own handlers on top (later phases).
   useEffect(() => {
@@ -70,7 +74,10 @@ export function useGestureControl(route: Route, navigate: (r: Route) => void): v
       engine.onEvent((event) => {
         // The setup wizard reads raw gestures itself; do not navigate away while practising.
         if (routeRef.current === 'setup') return;
-        const mappings = getSettings().mappings;
+        const current = getSettings();
+        // With the air cursor on, pinching is the click, so the pinch gestures must not also trigger actions.
+        if (current.airCursor && (event.gesture === 'pinch' || event.gesture === 'pinch-release')) return;
+        const mappings = current.mappings;
         const action = ACTIONS.find((a) => mappings[a.id] === event.gesture);
         if (!action) return;
 

@@ -82,7 +82,11 @@ export function HandCam({ hidden }: { hidden?: boolean }) {
     if (!box) return;
     const r = box.getBoundingClientRect();
     drag.current = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top, sx: e.clientX, sy: e.clientY, moved: false };
-    box.setPointerCapture?.(e.pointerId);
+    try {
+      box.setPointerCapture?.(e.pointerId);
+    } catch {
+      /* synthetic pointers (air cursor) cannot be captured */
+    }
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {

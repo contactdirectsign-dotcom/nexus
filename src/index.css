@@ -82,3 +82,10 @@ html[data-reduced='true'] *::after {
     scroll-behavior: auto !important;
   }
 }
+
+/* The thing under the air cursor (set by src/gestures/airPointer.ts). */
+[data-air-hover] {
+  outline: 2px solid var(--color-nx-pink);
+  outline-offset: 2px;
+  box-shadow: 0 0 18px rgba(255, 45, 149, 0.55);
+}

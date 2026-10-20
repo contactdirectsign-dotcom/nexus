@@ -288,7 +288,11 @@ export function GlobeCanvas({
     let pinchDist = 0;
 
     const onDown = (e: PointerEvent): void => {
-      canvas.setPointerCapture?.(e.pointerId);
+      try {
+        canvas.setPointerCapture?.(e.pointerId);
+      } catch {
+        /* synthetic pointers (air cursor) cannot be captured; they are delivered to the canvas directly */
+      }
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       fly = null;
       velLon = 0;

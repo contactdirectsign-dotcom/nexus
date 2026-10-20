@@ -1,0 +1,252 @@
+import { dist, LM, palmCenter, type Landmarks } from './landmarks';
+import type { PoseId } from './recognizer';
+
+/**
+ * Air cursor: turns your index fingertip into a pointer that covers the whole screen.
+ *
+ *  - Point with your index finger to move the cursor.
+ *  - Pinch thumb and index to press; keep pinching and move to drag; open to release.
+ *  - Hold up two fingers and move up/down to scroll (or zoom, over the globe).
+ *
+ * Pure logic (no camera, no DOM) so every rule can be tested. Hard problems solved here:
+ *  1. Reach: only the middle part of the camera frame maps to the screen, so you never reach for the edges.
+ *  2. Aim: the position is smoothed with a One Euro filter (steady when slow, quick when fast).
+ *  3. Pinch drift: closing a pinch moves the fingertip. When a pinch starts to close, the cursor freezes at
+ *     where it was ~120 ms earlier, so you click what you aimed at, not what the pinch pushed you onto.
+ *  4. Dragging: while pressed, the cursor follows your PALM (steady), not the pinching fingertips.
+ */
+
+export interface CursorConfig {
+  /** Camera margins (fraction of the frame) that are cut off, so the middle maps to the whole screen. */
+  marginX: number;
+  marginY: number;
+  /** Pinch distance / palm size below which the press starts, and above which it is released. */
+  pressRatio: number;
+  releaseRatio: number;
+  /** Pinch ratio at which the cursor freezes (hand is closing in on a click). */
+  approachRatio: number;
+  /** Mirror x (front camera shown as a mirror). */
+  mirror: boolean;
+  /** Video width / height. */
+  aspect: number;
+}
+
+export const DEFAULT_CURSOR_CONFIG: CursorConfig = {
+  marginX: 0.16,
+  marginY: 0.14,
+  pressRatio: 0.3,
+  releaseRatio: 0.46,
+  approachRatio: 0.62,
+  mirror: true,
+  aspect: 4 / 3,
+};
+
+export type CursorMode = 'hidden' | 'point' | 'pressed' | 'scroll';
+
+export interface CursorState {
+  mode: CursorMode;
+  /** Screen position as a fraction 0..1 of width / height. */
+  x: number;
+  y: number;
+  /** 0 (open) .. 1 (pinched): used to shrink the cursor ring while you pinch. */
+  closing: number;
+  /** In scroll mode: how far the fingertip moved this frame (screen height fractions, down is positive). */
+  scrollDy: number;
+}
+
+export type CursorEvent = 'down' | 'up';
+
+export const HIDDEN_CURSOR: CursorState = { mode: 'hidden', x: 0.5, y: 0.5, closing: 0, scrollDy: 0 };
+
+const clamp01 = (v: number): number => Math.min(1, Math.max(0, v));
+const HISTORY_MS = 500;
+const FREEZE_LOOKBACK_MS = 120;
+const FREEZE_TIMEOUT_MS = 700;
+const HIDE_GRACE_MS = 220;
+const DRAG_GAIN = 1.25;
+
+/** 2-D One Euro filter. */
+class Euro2D {
+  private px = 0;
+  private py = 0;
+  private vx = 0;
+  private vy = 0;
+  private t = 0;
+  private has = false;
+
+  constructor(
+    private readonly minCutoff: number,
+    private readonly beta: number,
+    private readonly dCutoff = 1.5,
+  ) {}
+
+  reset(): void {
+    this.has = false;
+  }
+
+  apply(t: number, x: number, y: number): { x: number; y: number } {
+    if (!this.has || t <= this.t || t - this.t > 500) {
+      this.has = true;
+      this.px = x;
+      this.py = y;
+      this.vx = 0;
+      this.vy = 0;
+      this.t = t;
+      return { x, y };
+    }
+    const dt = Math.max(0.001, (t - this.t) / 1000);
+    const alpha = (cutoff: number): number => 1 / (1 + 1 / (2 * Math.PI * cutoff) / dt);
+    const aD = alpha(this.dCutoff);
+    this.vx += aD * ((x - this.px) / dt - this.vx);
+    this.vy += aD * ((y - this.py) / dt - this.vy);
+    const a = alpha(this.minCutoff + this.beta * Math.hypot(this.vx, this.vy));
+    this.px += a * (x - this.px);
+    this.py += a * (y - this.py);
+    this.t = t;
+    return { x: this.px, y: this.py };
+  }
+}
+
+interface Sample {
+  t: number;
+  x: number;
+  y: number;
+}
+
+export class AirCursorTracker {
+  private cfg: CursorConfig;
+  private filter = new Euro2D(1.4, 7);
+  private history: Sample[] = [];
+  private lastEligible = Number.NEGATIVE_INFINITY;
+  private frozen: { x: number; y: number; since: number } | null = null;
+  private pressed = false;
+  private dragAnchor: { palmX: number; palmY: number; x: number; y: number } | null = null;
+  private lastRawY: number | null = null;
+  private state: CursorState = HIDDEN_CURSOR;
+  private last: { x: number; y: number } = { x: 0.5, y: 0.5 };
+
+  constructor(config: Partial<CursorConfig> = {}) {
+    this.cfg = { ...DEFAULT_CURSOR_CONFIG, ...config };
+  }
+
+  setConfig(patch: Partial<CursorConfig>): void {
+    this.cfg = { ...this.cfg, ...patch };
+  }
+
+  getState(): CursorState {
+    return this.state;
+  }
+
+  /** Call when the hand disappears or the camera stops. Returns an 'up' if a press was in progress. */
+  lost(): CursorEvent[] {
+    const events: CursorEvent[] = this.pressed ? ['up'] : [];
+    this.pressed = false;
+    this.frozen = null;
+    this.dragAnchor = null;
+    this.lastRawY = null;
+    this.history = [];
+    this.filter.reset();
+    this.state = HIDDEN_CURSOR;
+    return events;
+  }
+
+  /** Map a camera-frame point to the screen (0..1), using the central part of the frame. */
+  private toScreen(px: number, py: number): { x: number; y: number } {
+    const { marginX, marginY, mirror } = this.cfg;
+    const sx = clamp01((px - marginX) / (1 - 2 * marginX));
+    return { x: mirror ? 1 - sx : sx, y: clamp01((py - marginY) / (1 - 2 * marginY)) };
+  }
+
+  update(t: number, lm: Landmarks, pose: PoseId): { state: CursorState; events: CursorEvent[] } {
+    const events: CursorEvent[] = [];
+    if (lm.length < 21) {
+      return { state: this.state, events: this.lost() };
+    }
+    const { aspect } = this.cfg;
+
+    const handSize = Math.max(1e-6, dist(lm[LM.WRIST], lm[LM.MIDDLE_MCP], aspect));
+    const ratio = dist(lm[LM.THUMB_TIP], lm[LM.INDEX_TIP], aspect) / handSize;
+    const closing = clamp01((this.cfg.approachRatio - ratio) / (this.cfg.approachRatio - this.cfg.pressRatio));
+
+    const eligible = pose === 'pointing' || pose === 'pinch' || pose === 'two-finger' || this.pressed;
+    if (eligible) this.lastEligible = t;
+    if (!eligible && t - this.lastEligible > HIDE_GRACE_MS) {
+      return { state: this.state.mode === 'hidden' ? this.state : this.hideState(events), events };
+    }
+
+    // Where the fingertip points right now (smoothed).
+    const tip = lm[LM.INDEX_TIP];
+    const target = this.toScreen(tip.x, tip.y);
+    const smooth = this.filter.apply(t, target.x, target.y);
+    this.history.push({ t, x: smooth.x, y: smooth.y });
+    this.history = this.history.filter((s) => t - s.t <= HISTORY_MS);
+
+    let x = smooth.x;
+    let y = smooth.y;
+
+    if (this.pressed) {
+      // Dragging: follow the palm relative to where the press began.
+      if (ratio > this.cfg.releaseRatio) {
+        this.pressed = false;
+        this.dragAnchor = null;
+        this.frozen = null;
+        this.filter.reset();
+        events.push('up');
+      } else if (this.dragAnchor) {
+        const palm = palmCenter(lm);
+        const a = this.dragAnchor;
+        const now = this.toScreen(palm.x, palm.y);
+        const start = this.toScreen(a.palmX, a.palmY);
+        x = clamp01(a.x + (now.x - start.x) * DRAG_GAIN);
+        y = clamp01(a.y + (now.y - start.y) * DRAG_GAIN);
+      }
+    } else {
+      if (pose !== 'two-finger') {
+        // Freeze position when the hand starts closing for a click.
+        if (this.frozen === null && ratio < this.cfg.approachRatio) {
+          const back = this.history.find((s) => t - s.t <= FREEZE_LOOKBACK_MS) ?? this.history[0];
+          this.frozen = { x: back.x, y: back.y, since: t };
+        }
+        if (this.frozen !== null) {
+          if (ratio > this.cfg.approachRatio + 0.1 || t - this.frozen.since > FREEZE_TIMEOUT_MS) {
+            this.frozen = null; // changed their mind
+          } else {
+            x = this.frozen.x;
+            y = this.frozen.y;
+            if (ratio < this.cfg.pressRatio) {
+              this.pressed = true;
+              const palm = palmCenter(lm);
+              this.dragAnchor = { palmX: palm.x, palmY: palm.y, x, y };
+              events.push('down');
+            }
+          }
+        }
+      }
+    }
+
+    // Two-finger scroll: report vertical fingertip movement.
+    let scrollDy = 0;
+    const scrolling = pose === 'two-finger' && !this.pressed;
+    if (scrolling) {
+      if (this.lastRawY !== null) scrollDy = smooth.y - this.lastRawY;
+      this.lastRawY = smooth.y;
+    } else {
+      this.lastRawY = null;
+    }
+
+    this.last = { x, y };
+    const mode: CursorMode = this.pressed ? 'pressed' : scrolling ? 'scroll' : 'point';
+    this.state = { mode, x, y, closing: this.pressed ? 1 : closing, scrollDy };
+    return { state: this.state, events };
+  }
+
+  private hideState(events: CursorEvent[]): CursorState {
+    events.push(...this.lost());
+    return this.state;
+  }
+
+  /** Last position, used by overlays that keep the final spot visible briefly. */
+  lastPosition(): { x: number; y: number } {
+    return this.last;
+  }
+}

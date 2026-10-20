@@ -4,7 +4,7 @@
 
 A personal, free, gesture-controlled app. Black-and-pink interface, built with React, TypeScript, Vite and Tailwind CSS, hosted free on GitHub Pages. No backend, no paid services.
 
-> **Status: Phase 3 (World).** App shell, gesture control with a draggable hand camera, and World: a 3D Earth, city search with local time and weather, world clock, calendar, timer and stopwatch. News (Pulse) is **not built yet** and is labelled as such in the app.
+> **Status: Phase 3.2 (World + Air control).** App shell, gesture control with a draggable hand camera, and World: a 3D Earth, city search with local time and weather, world clock, calendar, timer and stopwatch. News (Pulse) is **not built yet** and is labelled as such in the app.
 
 ## Put it online for free (no installs needed)
 
@@ -35,7 +35,7 @@ npm run build      # production build into dist/
 src/
   app/          shell: App, TopBar, Nav, ErrorBoundary
   design/       reusable UI (Panel, Button, Badge, EmptyState), icons
-  modules/      dashboard, world (globe, clock, timer), calendar, pulse, settings (one folder each)
+  modules/      lab (air draw, target practice), dashboard, world (globe, clock, timer), calendar, pulse, settings (one folder each)
   gestures/     catalogue + mapping, pose recognizer, swipe/hold tracker, camera engine (MediaPipe)
   modules/setup first-time gesture setup wizard
   storage/      settings store (saved in the browser)

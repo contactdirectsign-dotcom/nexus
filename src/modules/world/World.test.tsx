@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { World } from './World';
+import { runAction } from '../../gestures/actionRegistry';
 import { clearPlaceInfoCache } from './placeApi';
 import { addFavorite, reloadFavorites } from '../../storage/favorites';
 import { resetSettings } from '../../storage/settings';
@@ -103,5 +104,24 @@ describe('World module', () => {
     expect(await screen.findByRole('timer', { name: 'Timer' })).toHaveTextContent(/^0[01]:\d\d$/);
     await user.click(screen.getByRole('button', { name: 'Pause' }));
     expect(screen.getByRole('button', { name: 'Resume' })).toBeInTheDocument();
+  });
+
+  it('timer: gesture actions adjust the minutes and start/pause', async () => {
+    const user = userEvent.setup();
+    render(<World />);
+    await user.click(await screen.findByRole('tab', { name: 'Timer' }));
+    await screen.findByRole('button', { name: '1 min' });
+    await act(async () => {
+      expect(runAction('scroll-up')).toBe(true); // +1 minute
+    });
+    expect(screen.getByLabelText('Minutes')).toHaveValue(6); // default 5 min + 1
+    await act(async () => {
+      expect(runAction('select')).toBe(true); // start
+    });
+    expect(await screen.findByRole('button', { name: 'Pause' })).toBeInTheDocument();
+    await act(async () => {
+      expect(runAction('back')).toBe(true); // reset
+    });
+    expect(screen.getByLabelText('Minutes')).toHaveValue(6);
   });
 });

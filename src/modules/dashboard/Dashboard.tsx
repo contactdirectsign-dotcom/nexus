@@ -78,6 +78,18 @@ export function Dashboard({ onNavigate }: { onNavigate: (r: Route) => void }) {
         )}
       </Panel>
 
+      <Panel title="Gesture Lab" className="lg:col-span-3" action={<Badge tone="pink">Try it</Badge>}>
+        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-nx-muted">
+            Draw in the air with a glowing pen, then test your aim by popping targets with a pinch. Start the camera, point
+            with your index finger, and pinch to click.
+          </p>
+          <Button variant="primary" onClick={() => onNavigate('lab')}>
+            Open the Lab
+          </Button>
+        </div>
+      </Panel>
+
       <Panel
         title="Today's important news"
         className="lg:col-span-3"

@@ -121,6 +121,12 @@ export function Settings() {
             onChange={(v) => updateSettings({ showHandCam: v })}
           />
         </Row>
+        <Row
+          label="Air cursor"
+          hint="Point with your index finger to move a glowing cursor over the whole app. Pinch thumb and index to click (keep pinching and move to drag). Hold up two fingers and move up or down to scroll, or to zoom the globe."
+        >
+          <Switch label="Air cursor" checked={settings.airCursor} onChange={(v) => updateSettings({ airCursor: v })} />
+        </Row>
         <Row label="Preferred hand" hint="Gestures from the other hand are ignored.">
           <select
             aria-label="Preferred hand"
@@ -170,7 +176,7 @@ export function Settings() {
       <Panel title="Gesture assignments">
         <p className="mb-2 text-sm text-nx-muted">
           Each gesture can trigger one action. Picking a gesture that is already used moves it to this action.
-          Poses must be held still briefly before they count, which prevents accidental triggers.
+          Poses must be held still briefly before they count, which prevents accidental triggers. While the air cursor is on, pinching is the click, so the pinch and pinch-and-release gestures do not trigger actions.
         </p>
         <GestureAssignments />
       </Panel>

@@ -26,6 +26,8 @@ export interface Settings {
   sensitivity: number;
   /** How quickly gestures react: calm, balanced, quick or instant. */
   gestureSpeed: GestureSpeed;
+  /** Point with your index finger to move a cursor, pinch to click, two fingers to scroll. */
+  airCursor: boolean;
   /** Show the small live hand-tracking camera in the top right while the camera is on. */
   showHandCam: boolean;
   mappings: GestureMappings;
@@ -42,6 +44,7 @@ export const DEFAULT_SETTINGS: Settings = {
   gestureEnabled: false,
   sensitivity: 0.5,
   gestureSpeed: DEFAULT_GESTURE_SPEED,
+  airCursor: true,
   showHandCam: true,
   mappings: DEFAULT_MAPPINGS,
 };
@@ -94,6 +97,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     gestureEnabled: typeof r.gestureEnabled === 'boolean' ? r.gestureEnabled : d.gestureEnabled,
     sensitivity: Math.min(1, Math.max(0, sens)),
     gestureSpeed: isGestureSpeed(r.gestureSpeed) ? r.gestureSpeed : d.gestureSpeed,
+    airCursor: typeof r.airCursor === 'boolean' ? r.airCursor : d.airCursor,
     showHandCam: typeof r.showHandCam === 'boolean' ? r.showHandCam : d.showHandCam,
     mappings,
   };

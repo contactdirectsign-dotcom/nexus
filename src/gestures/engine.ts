@@ -68,7 +68,21 @@ const INITIAL: EngineSnapshot = {
   lastAction: null,
 };
 
-export type FrameListener = (hands: readonly Landmarks[], size: { width: number; height: number }) => void;
+/** Extra facts about a frame, for things that react to the hand directly (the air cursor). */
+export interface FrameMeta {
+  t: number;
+  pose: PoseId;
+  handDetected: boolean;
+  /** Index (in `hands`) of the hand that controls NEXUS, or -1. */
+  selected: number;
+  aspect: number;
+}
+
+export type FrameListener = (
+  hands: readonly Landmarks[],
+  size: { width: number; height: number },
+  meta: FrameMeta,
+) => void;
 
 /** Translate browser camera errors into something a person can act on. */
 export function describeCameraError(e: unknown): string {
@@ -377,7 +391,15 @@ class GestureEngine {
         this.failures = 0;
         if (hands.length === 0) this.displaySmoothers.forEach((d) => d.reset());
         const display = hands.slice(0, 2).map((h, i) => this.displaySmoothers[i].apply(now, h.landmarks));
-        this.frameListeners.forEach((l) => l(display, { width: video.videoWidth, height: video.videoHeight }));
+        const tracked = this.tracker.getState();
+        const meta: FrameMeta = {
+          t: now,
+          pose: tracked.pose,
+          handDetected: tracked.handDetected,
+          selected: this.tracker.pickIndex(hands),
+          aspect: video.videoHeight > 0 ? video.videoWidth / video.videoHeight : 4 / 3,
+        };
+        this.frameListeners.forEach((l) => l(display, { width: video.videoWidth, height: video.videoHeight }, meta));
         this.patch({ ...this.trackerFields(), fps: Math.round(this.fpsEma) });
         for (const e of events) {
           this.patch({ lastEvent: e });

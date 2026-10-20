@@ -32,6 +32,21 @@ describe('NEXUS shell', () => {
     expect(await screen.findByText(/No news source connected$/i)).toBeInTheDocument();
   });
 
+  it('opens the Gesture Lab from the navigation', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const [nav] = screen.getAllByRole('navigation', { name: 'Main' });
+    await user.click(within(nav).getByRole('button', { name: /lab/i }));
+    expect(await screen.findByRole('tab', { name: 'Air Draw' })).toBeInTheDocument();
+  });
+
+  it('shows the air cursor overlay without blocking touches', () => {
+    render(<App />);
+    const cursor = screen.getByTestId('air-cursor');
+    expect(cursor).toHaveClass('pointer-events-none');
+    expect(cursor).toHaveAttribute('aria-hidden', 'true');
+  });
+
   it('opens settings from the top bar button', async () => {
     const user = userEvent.setup();
     render(<App />);

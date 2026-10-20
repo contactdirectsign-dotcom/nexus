@@ -302,15 +302,21 @@ export class GestureTracker {
     return Math.hypot(b.x - a.x, b.y - a.y) < STILL_MAX_MOVE;
   }
 
-  private pickHand(hands: readonly HandFrame[]): HandFrame | null {
+  /** Index of the hand that controls NEXUS (best score among hands allowed by the hand preference), or -1. */
+  pickIndex(hands: readonly HandFrame[]): number {
     const wanted = this.cfg.hand;
-    let best: HandFrame | null = null;
-    for (const h of hands) {
+    let best = -1;
+    hands.forEach((h, i) => {
       const side = userHandFromLabel(h.label);
-      if ((wanted === 'right' || wanted === 'left') && side !== null && side !== wanted) continue;
-      if (!best || h.score > best.score) best = h;
-    }
+      if ((wanted === 'right' || wanted === 'left') && side !== null && side !== wanted) return;
+      if (best < 0 || h.score > hands[best].score) best = i;
+    });
     return best;
+  }
+
+  private pickHand(hands: readonly HandFrame[]): HandFrame | null {
+    const i = this.pickIndex(hands);
+    return i >= 0 ? hands[i] : null;
   }
 
   private clearTracking(): void {
