@@ -16,7 +16,10 @@ export interface CursorView extends CursorState {
 }
 
 const POINTER_ID = 4242;
-const CLICK_SLOP_PX = 14;
+const CLICK_SLOP_PX = 22;
+/** A dropped camera frame while pinching must not end the drag or click. */
+const PRESS_LOSS_GRACE_MS = 300;
+let lossSince = 0;
 const SCROLL_GAIN = 2.4;
 const INTERACTIVE =
   'button, a[href], [role="tab"], [role="button"], input, select, textarea, summary, label, [data-air-target]';
@@ -206,9 +209,15 @@ function onFrame(_hands: readonly Landmarks[], _size: { width: number; height: n
   const lm = meta.raw;
   // Any detected hand is enough: the cursor decides for itself whether the fingers are in a cursor pose.
   if (!running || engine.getSnapshot().status !== 'running' || !lm) {
+    if (running && lm === null && view.mode === 'pressed' && engine.getSnapshot().status === 'running') {
+      if (lossSince === 0) lossSince = meta.t;
+      if (meta.t - lossSince < PRESS_LOSS_GRACE_MS) return; // keep holding for a moment
+    }
+    lossSince = 0;
     hide();
     return;
   }
+  lossSince = 0;
   tracker.setConfig({ aspect: meta.aspect });
   const { state, events } = tracker.update(meta.t, lm, meta.pose === 'pointing');
   if (state.mode === 'hidden') {

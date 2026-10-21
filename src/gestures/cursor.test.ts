@@ -18,6 +18,14 @@ function hand(x: number, y: number, gap = 0.2, spec: HandSpec = POINT): Landmark
   return pts;
 }
 
+/** Only the fingertip drifts (the finger flexes); the rest of the hand stays where it is. */
+function flexed(dx: number, dy: number, gap: number): Landmarks {
+  const pts: Point[] = [...hand(0.5, 0.5, gap)];
+  pts[8] = { x: pts[8].x + dx, y: pts[8].y + dy, z: 0 };
+  pts[4] = { x: pts[8].x - gap, y: pts[8].y, z: 0 };
+  return pts;
+}
+
 const feed = (c: AirCursorTracker, from: number, to: number, f: (t: number) => Landmarks, step = 33) => {
   const events: string[] = [];
   let state = c.getState();
@@ -155,7 +163,7 @@ describe('pinch click', () => {
     let downAt = { x: -1, y: -1 };
     for (let t = 433; t <= 800; t += 33) {
       const k = Math.min(1, (t - 433) / 250);
-      const r = c.update(t, hand(0.5 + k * 0.08, 0.5 + k * 0.08, 0.2 - k * 0.19));
+      const r = c.update(t, flexed(k * 0.08, k * 0.08, 0.2 - k * 0.19));
       if (r.events.includes('down')) downAt = { x: r.state.x, y: r.state.y };
     }
     expect(downAt.x).toBeGreaterThan(0);
@@ -218,5 +226,61 @@ describe('Phase 3.4 cursor', () => {
   it('without a hint an open palm stays hidden', () => {
     const t = new AirCursorTracker();
     expect(t.update(0, makeHand(), false).state.mode).toBe('hidden');
+  });
+});
+
+describe('click accuracy', () => {
+  it('a click aims where the finger was before the pinch began, even when the tip drifts while closing', () => {
+    const c = new AirCursorTracker();
+    const settled = feed(c, 0, 400, () => hand(0.5, 0.5, 0.3)).state;
+    let downAt: { x: number; y: number } | null = null;
+    for (let i = 0; i <= 8; i++) {
+      const k = i / 8;
+      const r = c.update(430 + i * 16, flexed(0.06 * k, 0.05 * k, 0.3 - 0.27 * k));
+      if (r.events.includes('down')) downAt = { x: r.state.x, y: r.state.y };
+    }
+    expect(downAt).not.toBeNull();
+    expect(Math.hypot(downAt!.x - settled.x, downAt!.y - settled.y)).toBeLessThan(0.03);
+  });
+});
+
+describe('click and drag steadiness', () => {
+  it('a drag is smooth: no jumps from landmark jitter', () => {
+    const c = new AirCursorTracker({ marginX: 0, marginY: 0, mirror: false });
+    feed(c, 0, 300, () => hand(0.4, 0.5, 0.3));
+    feed(c, 333, 500, () => hand(0.4, 0.5, 0.03)); // pinch
+    let prev: number | null = null;
+    let worst = 0;
+    for (let t = 533; t <= 1100; t += 33) {
+      const jitter = (Math.sin(t) * 0.004);
+      const r = c.update(t, hand(0.4 + (t - 533) * 0.0003 + jitter, 0.5, 0.03));
+      if (r.state.mode === 'pressed') {
+        if (prev !== null) worst = Math.max(worst, Math.abs(r.state.x - prev));
+        prev = r.state.x;
+      }
+    }
+    expect(prev).not.toBeNull();
+    expect(worst).toBeLessThan(0.03);
+  });
+  it('letting go happens where the drag was, not where the opening fingers wandered', () => {
+    const c = new AirCursorTracker({ marginX: 0, marginY: 0, mirror: false });
+    feed(c, 0, 300, () => hand(0.4, 0.5, 0.3));
+    feed(c, 333, 600, () => hand(0.4, 0.5, 0.03));
+    let up: { x: number; y: number } | null = null;
+    for (let i = 0; i < 6; i++) {
+      const k = i / 5;
+      const r = c.update(633 + i * 33, hand(0.4, 0.5, 0.03 + 0.5 * k));
+      if (r.events.includes('up')) up = { x: r.state.x, y: r.state.y };
+    }
+    expect(up).not.toBeNull();
+    expect(Math.abs(up!.x - 0.4)).toBeLessThan(0.06);
+  });
+  it('one noisy frame in the middle of a pinch does not release it', () => {
+    const c = new AirCursorTracker();
+    feed(c, 0, 300, () => hand(0.5, 0.5, 0.3));
+    feed(c, 333, 500, () => hand(0.5, 0.5, 0.03));
+    const r = feed(c, 533, 533, () => hand(0.5, 0.5, 0.5));
+    const r2 = feed(c, 566, 600, () => hand(0.5, 0.5, 0.03));
+    expect([...r.events, ...r2.events]).not.toContain('up');
   });
 });

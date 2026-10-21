@@ -87,22 +87,47 @@ html[data-reduced='true'] *::after {
 [data-air-hover] {
   outline: 2px solid var(--color-nx-pink);
   outline-offset: 2px;
-  box-shadow: 0 0 18px rgba(255, 45, 149, 0.55);
 }
+
+/* Air cursor parts. Colours switch by state; nothing animates per frame except position. */
+.nx-cur-ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 40px;
+  height: 40px;
+  transform: translate(-50%, -50%);
+  transition: transform 0.14s ease-out;
+}
+.nx-cur-ring-base { stroke: rgba(255, 45, 149, 0.7); }
+.nx-cur-ring[data-state='hover'] .nx-cur-ring-base { stroke: #ffffff; }
+.nx-cur-ring[data-state='pressed'] .nx-cur-ring-base { stroke: rgba(255, 255, 255, 0.5); }
+.nx-cur-ring[data-state='scroll'] .nx-cur-ring-base { stroke-dasharray: 4 5; }
+.nx-cur-core {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 9999px;
+  background: #ff2d95;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55), 0 0 10px 2px rgba(255, 45, 149, 0.7);
+}
+.nx-cur-core[data-state='hover'], .nx-cur-core[data-state='pressed'] { background: #ffffff; }
 
 /* Click ripple of the air cursor. */
 @keyframes nx-ripple {
   from { transform: translate(-50%, -50%) scale(0.35); opacity: 0.95; }
-  to { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
+  to { transform: translate(-50%, -50%) scale(2); opacity: 0; }
 }
 .nx-ripple {
   position: absolute;
-  width: 46px;
-  height: 46px;
+  width: 40px;
+  height: 40px;
   border-radius: 9999px;
-  border: 2px solid #ffffff;
-  box-shadow: 0 0 20px #ff2d95, inset 0 0 12px rgba(255, 45, 149, 0.6);
-  animation: nx-ripple 0.55s ease-out forwards;
+  border: 2px solid #ff6ec7;
+  animation: nx-ripple 0.4s ease-out forwards;
   pointer-events: none;
 }
 html[data-reduced='true'] .nx-ripple { display: none; }

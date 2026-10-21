@@ -91,3 +91,15 @@ Apply the Phase 3 update (`npm install` is needed for the new packages), check t
 - The air cursor appears for any detected hand in a pointing pose, also when the main gesture recogniser says "pointing". A half-curled middle finger still counts as pointing.
 - Magnetic targets: the cursor counts as on a button when it is within about 22 px of it, so small buttons are easier to hit.
 - Settings → "Show tracking details" adds a line to the hand window (model time, camera size, quality tier, finger readings). The version is shown in the same setting's hint.
+
+## Phase 3.5: steadier clicks
+- The aim now freezes earlier: as soon as the thumb and index start moving together (or close quickly), the cursor locks to where the fingertip was about 0.2 s before, so the finger drifting during a pinch no longer shifts the click.
+
+## Phase 3.6: clicks and drags rebuilt
+- The aim point now follows the smoothed palm while you pinch, so flexing or opening your fingers no longer moves it.
+- Dragging uses a smoothed palm (it used raw landmarks before, which jittered).
+- Releasing needs two frames of open fingers and lets go at the last steady spot; a single noisy frame no longer drops the drag.
+- A camera frame with no hand during a pinch is ignored for 0.3 s. The click move allowance is 22 px.
+
+## Phase 3.7: lighter, cleaner cursor
+- Cursor redrawn: a small dot with a thin ring (fills while pinching, grows over buttons, shrinks while pressed). The trail, drop-shadow filter and per-frame glow changes are gone; only one transform changes per frame.

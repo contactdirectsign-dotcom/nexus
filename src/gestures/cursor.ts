@@ -36,8 +36,8 @@ export const DEFAULT_CURSOR_CONFIG: CursorConfig = {
   marginX: 0.16,
   marginY: 0.14,
   pressRatio: 0.3,
-  releaseRatio: 0.46,
-  approachRatio: 0.62,
+  releaseRatio: 0.6,
+  approachRatio: 0.8,
   mirror: true,
   aspect: 4 / 3,
 };
@@ -61,8 +61,12 @@ export const HIDDEN_CURSOR: CursorState = { mode: 'hidden', x: 0.5, y: 0.5, clos
 
 const clamp01 = (v: number): number => Math.min(1, Math.max(0, v));
 const HISTORY_MS = 500;
-const FREEZE_LOOKBACK_MS = 120;
-const FREEZE_TIMEOUT_MS = 700;
+const FREEZE_LOOKBACK_MS = 220;
+/** A pinch that closes this fast (ratio units within 120 ms) freezes the aim even before the approach distance. */
+const CLOSE_RATE = 0.14;
+const CLOSE_WINDOW_MS = 120;
+const CLOSE_MAX_RATIO = 1.15;
+const FREEZE_TIMEOUT_MS = 550;
 const HIDE_GRACE_MS = 220;
 const DRAG_GAIN = 1.25;
 /** Look a little ahead on fast movement to hide the camera's own delay (seconds). Zero effect when slow. */
@@ -150,16 +154,22 @@ interface Sample {
   t: number;
   x: number;
   y: number;
+  /** Smoothed palm centre (screen units) at the same moment: it barely moves when fingers flex. */
+  px: number;
+  py: number;
 }
 
 export class AirCursorTracker {
   private cfg: CursorConfig;
   private filter = new Euro2D(1.6, 9, 4);
+  private palmFilter = new Euro2D(1.2, 6, 3);
+  private releaseFrames = 0;
   private history: Sample[] = [];
   private lastEligible = Number.NEGATIVE_INFINITY;
-  private frozen: { x: number; y: number; since: number } | null = null;
+  private ratios: { t: number; r: number }[] = [];
+  private frozen: { x: number; y: number; px: number; py: number; since: number } | null = null;
   private pressed = false;
-  private dragAnchor: { palmX: number; palmY: number; x: number; y: number } | null = null;
+  private dragAnchor: { px: number; py: number; x: number; y: number } | null = null;
   private lastRawY: number | null = null;
   private state: CursorState = HIDDEN_CURSOR;
   private last: { x: number; y: number } = { x: 0.5, y: 0.5 };
@@ -185,6 +195,8 @@ export class AirCursorTracker {
     this.lastRawY = null;
     this.history = [];
     this.filter.reset();
+    this.palmFilter.reset();
+    this.releaseFrames = 0;
     this.state = HIDDEN_CURSOR;
     return events;
   }
@@ -228,47 +240,61 @@ export class AirCursorTracker {
     const tip = lm[LM.INDEX_TIP];
     const target = this.toScreen(tip.x, tip.y);
     const smooth = this.filter.apply(t, target.x, target.y);
-    this.history.push({ t, x: smooth.x, y: smooth.y });
+    const palmRaw = palmCenter(lm);
+    const palmScreen = this.toScreen(palmRaw.x, palmRaw.y);
+    const palm = this.palmFilter.apply(t, palmScreen.x, palmScreen.y);
+    this.history.push({ t, x: smooth.x, y: smooth.y, px: palm.x, py: palm.y });
     this.history = this.history.filter((s) => t - s.t <= HISTORY_MS);
 
     let x = smooth.x;
     let y = smooth.y;
 
     if (this.pressed) {
-      // Dragging: follow the palm relative to where the press began.
-      if (ratio > this.cfg.releaseRatio) {
+      // Dragging: follow the (smoothed) palm relative to where the press began. Fingers flexing do not move it.
+      this.releaseFrames = ratio > this.cfg.releaseRatio ? this.releaseFrames + 1 : 0;
+      if (this.releaseFrames >= 2) {
+        // Let go at the last steady spot, not where the opening fingers drifted to.
         this.pressed = false;
         this.dragAnchor = null;
         this.frozen = null;
+        this.releaseFrames = 0;
         this.filter.reset();
+        x = this.last.x;
+        y = this.last.y;
         events.push('up');
       } else if (this.dragAnchor) {
-        const palm = palmCenter(lm);
-        const a = this.dragAnchor;
-        const now = this.toScreen(palm.x, palm.y);
-        const start = this.toScreen(a.palmX, a.palmY);
-        x = clamp01(a.x + (now.x - start.x) * DRAG_GAIN);
-        y = clamp01(a.y + (now.y - start.y) * DRAG_GAIN);
+        const an = this.dragAnchor;
+        x = clamp01(an.x + (palm.x - an.px) * DRAG_GAIN);
+        y = clamp01(an.y + (palm.y - an.py) * DRAG_GAIN);
+        if (this.releaseFrames > 0) {
+          x = this.last.x; // fingers are opening: hold still until it is clear whether this is a release
+          y = this.last.y;
+        }
       }
     } else {
       if (shape === 'two') {
         this.frozen = null; // scrolling: never keep a stale aim point from a half-closed pinch
       } else {
         // Freeze position when the hand starts closing for a click.
-        if (this.frozen === null && ratio < this.cfg.approachRatio) {
+        this.ratios.push({ t, r: ratio });
+        this.ratios = this.ratios.filter((q) => t - q.t <= CLOSE_WINDOW_MS);
+        const oldest = this.ratios[0];
+        const closingFast = !!oldest && oldest.r - ratio > CLOSE_RATE && ratio < CLOSE_MAX_RATIO;
+        if (this.frozen === null && (ratio < this.cfg.approachRatio || closingFast)) {
           const back = this.history.find((s) => t - s.t <= FREEZE_LOOKBACK_MS) ?? this.history[0];
-          this.frozen = { x: back.x, y: back.y, since: t };
+          this.frozen = { x: back.x, y: back.y, px: back.px, py: back.py, since: t };
         }
         if (this.frozen !== null) {
-          if (ratio > this.cfg.approachRatio + 0.1 || t - this.frozen.since > FREEZE_TIMEOUT_MS) {
+          if (ratio > Math.max(this.cfg.approachRatio + 0.1, CLOSE_MAX_RATIO + 0.15) || t - this.frozen.since > FREEZE_TIMEOUT_MS) {
             this.frozen = null; // changed their mind
           } else {
-            x = this.frozen.x;
-            y = this.frozen.y;
+            // Aim stays where the finger was, but follows the hand if the whole hand moves.
+            x = clamp01(this.frozen.x + (palm.x - this.frozen.px));
+            y = clamp01(this.frozen.y + (palm.y - this.frozen.py));
             if (ratio < this.cfg.pressRatio) {
               this.pressed = true;
-              const palm = palmCenter(lm);
-              this.dragAnchor = { palmX: palm.x, palmY: palm.y, x, y };
+              this.releaseFrames = 0;
+              this.dragAnchor = { px: palm.x, py: palm.y, x, y };
               events.push('down');
             }
           }
