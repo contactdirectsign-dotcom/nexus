@@ -206,3 +206,17 @@ describe('two-finger scroll', () => {
     expect(total).toBeGreaterThan(0.15);
   });
 });
+
+describe('Phase 3.4 cursor', () => {
+  it('shows the cursor when the recogniser says pointing even if the quick check disagrees', () => {
+    const t = new AirCursorTracker();
+    const lm = makeHand(); // open palm: the quick check says "none"
+    expect(handShape(lm, 4 / 3, 0.62)).toBe('none');
+    expect(t.update(0, lm, true).state.mode).toBe('point');
+    expect(t.debug().hinted).toBe(true);
+  });
+  it('without a hint an open palm stays hidden', () => {
+    const t = new AirCursorTracker();
+    expect(t.update(0, makeHand(), false).state.mode).toBe('hidden');
+  });
+});

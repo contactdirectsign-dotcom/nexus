@@ -25,7 +25,24 @@ const MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 
 const ACTIVE_INTERVAL_MS = 33; // about 30 frames per second: responsive skeleton and gestures
-const PAUSED_INTERVAL_MS = 250; // while paused we only watch for the "resume" gesture
+const PAUSED_INTERVAL_MS = 250;
+/**
+ * Camera size. The hand model looks at a ~224 px picture anyway, so a small frame costs almost nothing in accuracy
+ * and is much cheaper to decode, copy and draw. 4:3 keeps the proportions the gesture maths expect.
+ */
+const CAMERA_WIDTH = 320;
+const CAMERA_HEIGHT = 240;
+/** Never run the hand model more often than this, whatever the camera delivers. */
+const MIN_FRAME_GAP_MS = 14;
+/**
+ * The browser needs the main thread for touches and drawing. After each frame, leave at least this share of time
+ * idle: gap >= detectMs / (1 - IDLE_SHARE_TARGET) would be exact; this simple form keeps about 35 % free.
+ */
+const BUSY_SHARE_MAX = 0.65;
+const MAX_FRAME_GAP_MS = 120;
+/** Below this many frames per second (for this long) the app switches to lighter visuals. */
+const SLOW_FPS = 18;
+const SLOW_FOR_MS = 2500; // while paused we only watch for the "resume" gesture
 
 export type EngineStatus =
   | 'idle'
@@ -49,6 +66,12 @@ export interface EngineSnapshot {
   fps: number;
   /** Which processor runs the hand model. CPU is much slower than GPU. */
   delegate: 'GPU' | 'CPU' | null;
+  /** Milliseconds the hand model needs per frame (average). */
+  detectMs: number;
+  /** Visual quality tier: 0 full, 1 lighter (no glow/trail), 2 lightest (skeleton only, no live video). Set automatically when the phone is slow. */
+  perf: 0 | 1 | 2;
+  /** Camera picture size actually delivered, e.g. "320x240". */
+  resolution: string;
   lastEvent: GestureEvent | null;
   lastAction: { id: ActionId; t: number } | null;
 }
@@ -64,6 +87,9 @@ const INITIAL: EngineSnapshot = {
   detectScore: IDLE_STATE.detectScore,
   fps: 0,
   delegate: null,
+  detectMs: 0,
+  perf: 0,
+  resolution: '',
   lastEvent: null,
   lastAction: null,
 };
@@ -134,6 +160,9 @@ class GestureEngine {
   private frameCb: number | null = null;
   private lastFrameAt = 0;
   private fpsEma = 0;
+  private detectEma = 0;
+  private lastProcessAt = 0;
+  private slowSince = 0;
   private lastVideoTime = -1;
   private failures = 0;
   /** True while the user wants the camera on (used to resume after the tab was hidden). */
@@ -181,7 +210,10 @@ class GestureEngine {
     const s = this.snap.status;
     if (s === 'requesting' || s === 'loading' || s === 'running' || s === 'paused') return;
     this.wantRunning = true;
-    this.patch({ status: 'requesting', error: null });
+    this.detectEma = 0;
+    this.lastProcessAt = 0;
+    this.slowSince = 0;
+    this.patch({ status: 'requesting', error: null, perf: 0 });
 
     try {
       await this.openCamera();
@@ -242,7 +274,7 @@ class GestureEngine {
       throw new DOMException('Camera API unavailable', 'SecurityError');
     }
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 60 } },
+      video: { facingMode: 'user', width: { ideal: CAMERA_WIDTH }, height: { ideal: CAMERA_HEIGHT }, frameRate: { ideal: 60 } },
       audio: false,
     });
     this.stream = stream;
@@ -264,6 +296,7 @@ class GestureEngine {
     await this.video.play();
     if (this.video.videoWidth > 0 && this.video.videoHeight > 0) {
       this.tracker.setConfig({ aspect: this.video.videoWidth / this.video.videoHeight });
+      this.patch({ resolution: `${this.video.videoWidth}x${this.video.videoHeight}` });
     }
   }
 
@@ -372,10 +405,23 @@ class GestureEngine {
     const landmarker = this.landmarker;
 
     if (video && landmarker && video.readyState >= 2 && video.currentTime !== this.lastVideoTime) {
+      // Governor: leave the browser enough idle time. A slow hand model must never starve touches and drawing.
+      const sinceLast = performance.now() - this.lastProcessAt;
+      const gap =
+        status === 'paused'
+          ? 0
+          : Math.min(MAX_FRAME_GAP_MS, Math.max(MIN_FRAME_GAP_MS, this.detectEma / BUSY_SHARE_MAX));
+      if (sinceLast < gap) {
+        this.schedule(ACTIVE_INTERVAL_MS); // not yet: wait for a later camera frame (the frame is not consumed)
+        return;
+      }
       this.lastVideoTime = video.currentTime;
       try {
         const now = performance.now();
         const result = landmarker.detectForVideo(video, now) as unknown as RawHandResult;
+        const took = performance.now() - now;
+        this.detectEma = this.detectEma === 0 ? took : this.detectEma * 0.85 + took * 0.15;
+        this.lastProcessAt = now;
         const sides = result.handedness ?? result.handednesses ?? [];
         const hands: HandFrame[] = result.landmarks.map((landmarks, i) => {
           const category = sides[i]?.[0];
@@ -388,9 +434,9 @@ class GestureEngine {
           this.fpsEma = this.fpsEma === 0 ? inst : this.fpsEma * 0.9 + inst * 0.1;
         }
         this.lastFrameAt = now;
+        this.failures = 0;
 
         const events = this.tracker.update(now, hands);
-        this.failures = 0;
         if (hands.length === 0) this.displaySmoothers.forEach((d) => d.reset());
         const display = hands.slice(0, 2).map((h, i) => this.displaySmoothers[i].apply(now, h.landmarks));
         const tracked = this.tracker.getState();
@@ -403,11 +449,30 @@ class GestureEngine {
           raw: sel >= 0 ? hands[sel].landmarks : null,
           aspect: video.videoHeight > 0 ? video.videoWidth / video.videoHeight : 4 / 3,
         };
-        this.frameListeners.forEach((l) => l(display, { width: video.videoWidth, height: video.videoHeight }, meta));
-        this.patch({ ...this.trackerFields(), fps: Math.round(this.fpsEma) });
+        // A bug in a screen's frame listener must never stop hand tracking, so each one is isolated.
+        for (const l of this.frameListeners) {
+          try {
+            l(display, { width: video.videoWidth, height: video.videoHeight }, meta);
+          } catch (err) {
+            console.error('Frame listener failed', err);
+          }
+        }
+        this.governQuality(now);
+        this.patch({
+          ...this.trackerFields(),
+          fps: Math.round(this.fpsEma),
+          detectMs: Math.round(this.detectEma),
+          resolution: `${video.videoWidth}x${video.videoHeight}`,
+        });
         for (const e of events) {
           this.patch({ lastEvent: e });
-          this.eventListeners.forEach((l) => l(e));
+          for (const l of this.eventListeners) {
+            try {
+              l(e);
+            } catch (err) {
+              console.error('Gesture listener failed', err);
+            }
+          }
         }
       } catch (e) {
         this.failures += 1;
@@ -423,6 +488,21 @@ class GestureEngine {
     }
     this.schedule(this.snap.status === 'paused' ? PAUSED_INTERVAL_MS : ACTIVE_INTERVAL_MS);
   };
+
+  /** If the phone stays slow, step the visuals down (never the tracking itself) until it keeps up. */
+  private governQuality(now: number): void {
+    const slow = this.fpsEma > 0 && this.fpsEma < SLOW_FPS;
+    if (!slow) {
+      this.slowSince = 0;
+      return;
+    }
+    if (this.slowSince === 0) this.slowSince = now;
+    if (now - this.slowSince > SLOW_FOR_MS && this.snap.perf < 2) {
+      this.slowSince = now;
+      this.fpsEma = 0; // measure again at the new tier
+      this.patch({ perf: (this.snap.perf + 1) as 1 | 2 });
+    }
+  }
 
   private trackerFields(): Pick<
     EngineSnapshot,

@@ -31,6 +31,43 @@ const listeners = new Set<(v: CursorView) => void>();
 let hoverEl: Element | null = null;
 let press: { target: Element; x: number; y: number; moved: boolean } | null = null;
 
+/** Diagnostics for the optional debug line in the hand window. */
+export function getAirDebug(): ReturnType<AirCursorTracker['debug']> {
+  return tracker.debug();
+}
+
+// Magnetic targets: small buttons are hard to hit with a finger in the air, so a cursor that is just next to a
+// clickable thing counts as being on it. The list of targets is cached briefly (measuring everything every
+// frame would itself cause lag).
+const SNAP_PX = 22;
+const CACHE_MS = 300;
+let snapCache: { at: number; items: { el: Element; r: DOMRect }[] } = { at: 0, items: [] };
+
+function magnetTarget(px: number, py: number, under: Element | null): Element | null {
+  if (under && under.closest(INTERACTIVE)) return under;
+  const now = performance.now();
+  if (now - snapCache.at > CACHE_MS) {
+    const items: { el: Element; r: DOMRect }[] = [];
+    document.querySelectorAll(INTERACTIVE).forEach((el) => {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < window.innerHeight) items.push({ el, r });
+    });
+    snapCache = { at: now, items };
+  }
+  let best: Element | null = null;
+  let bestD = SNAP_PX;
+  for (const { el, r } of snapCache.items) {
+    const dx = Math.max(r.left - px, 0, px - r.right);
+    const dy = Math.max(r.top - py, 0, py - r.bottom);
+    const d = Math.hypot(dx, dy);
+    if (d < bestD && el.isConnected) {
+      bestD = d;
+      best = el;
+    }
+  }
+  return best ?? under;
+}
+
 export function getAirCursor(): CursorView {
   return view;
 }
@@ -167,19 +204,20 @@ function hide(): void {
 
 function onFrame(_hands: readonly Landmarks[], _size: { width: number; height: number }, meta: FrameMeta): void {
   const lm = meta.raw;
-  if (!running || engine.getSnapshot().status !== 'running' || !meta.handDetected || !lm) {
+  // Any detected hand is enough: the cursor decides for itself whether the fingers are in a cursor pose.
+  if (!running || engine.getSnapshot().status !== 'running' || !lm) {
     hide();
     return;
   }
   tracker.setConfig({ aspect: meta.aspect });
-  const { state, events } = tracker.update(meta.t, lm);
+  const { state, events } = tracker.update(meta.t, lm, meta.pose === 'pointing');
   if (state.mode === 'hidden') {
     hide();
     return;
   }
   const px = state.x * window.innerWidth;
   const py = state.y * window.innerHeight;
-  const el = document.elementFromPoint(px, py);
+  const el = magnetTarget(px, py, document.elementFromPoint(px, py));
 
   if (state.mode !== 'pressed') setHover(el);
   handleEvents(events, px, py, el);

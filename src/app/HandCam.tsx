@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { HandView } from '../design/HandView';
-import { useAirCursorMode } from '../gestures/airPointer';
+import { getAirDebug, useAirCursorMode } from '../gestures/airPointer';
 import { ProgressBar } from '../design/ui';
 import { ACTIONS, getGesture } from '../gestures/definitions';
 import { useEngine } from '../gestures/engine';
@@ -45,6 +45,7 @@ export function HandCam({ hidden }: { hidden?: boolean }) {
   const settings = useSettings();
   const mode = useAirCursorMode();
   const [big, setBig] = useState(false);
+  const [dbg, setDbg] = useState('');
   const [toast, setToast] = useState<string | null>(null);
   const [pos, setPos] = useState<Pos | null>(loadPos);
   const [dragging, setDragging] = useState(false);
@@ -58,6 +59,15 @@ export function HandCam({ hidden }: { hidden?: boolean }) {
     const id = window.setTimeout(() => setToast(null), 1800);
     return () => window.clearTimeout(id);
   }, [lastAction]);
+
+  useEffect(() => {
+    if (!settings.showDebug) return;
+    const id = window.setInterval(() => {
+      const d = getAirDebug();
+      setDbg(`${d.shape}${d.hinted ? '*' : ''} [${d.ratios.join(' ')}]`);
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [settings.showDebug]);
 
   const clamp = useCallback((p: Pos): Pos => {
     const el = boxRef.current;
@@ -142,7 +152,7 @@ export function HandCam({ hidden }: { hidden?: boolean }) {
   return (
     <div
       ref={boxRef}
-      style={{ ...placement, touchAction: 'none' }}
+      style={{ ...placement, touchAction: 'none', backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
       className={`nx-glass fixed z-30 select-none overflow-hidden rounded-2xl p-1.5 transition-[width,box-shadow,border-color] duration-300 ${big ? 'w-52' : 'w-32'} ${
         dragging ? 'cursor-grabbing shadow-[0_0_28px_rgba(255,45,149,0.6)]' : 'cursor-grab'
       } ${cam.handDetected && !dragging ? 'border-nx-pink/70 shadow-[0_0_18px_rgba(255,45,149,0.35)]' : ''}`}
@@ -178,6 +188,13 @@ export function HandCam({ hidden }: { hidden?: boolean }) {
           {cam.delegate ? ` · ${cam.delegate}` : ''}
           {cam.fps > 0 && cam.fps < 12 ? ' · slow' : ''}
         </div>
+        {settings.showDebug && (
+          <div className="break-all font-mono text-[9px] text-nx-muted" data-testid="hand-cam-debug">
+            {cam.detectMs}ms · {cam.resolution} · perf{cam.perf}
+            <br />
+            {dbg}
+          </div>
+        )}
         <ProgressBar value={cam.handDetected ? cam.holdProgress : 0} label="Hold progress" />
         <div className="mt-1 min-h-3 truncate text-nx-pink" aria-live="polite">
           {cam.status === 'paused' ? 'Paused' : toast ? `✓ ${toast}` : ''}

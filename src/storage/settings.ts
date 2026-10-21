@@ -30,6 +30,8 @@ export interface Settings {
   airCursor: boolean;
   /** Show the small live hand-tracking camera in the top right while the camera is on. */
   showHandCam: boolean;
+  /** Show a small diagnostics line (fps, model time, finger readings) in the hand window. */
+  showDebug: boolean;
   mappings: GestureMappings;
 }
 
@@ -46,6 +48,7 @@ export const DEFAULT_SETTINGS: Settings = {
   gestureSpeed: DEFAULT_GESTURE_SPEED,
   airCursor: true,
   showHandCam: true,
+  showDebug: false,
   mappings: DEFAULT_MAPPINGS,
 };
 
@@ -99,6 +102,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     gestureSpeed: isGestureSpeed(r.gestureSpeed) ? r.gestureSpeed : d.gestureSpeed,
     airCursor: typeof r.airCursor === 'boolean' ? r.airCursor : d.airCursor,
     showHandCam: typeof r.showHandCam === 'boolean' ? r.showHandCam : d.showHandCam,
+    showDebug: typeof r.showDebug === 'boolean' ? r.showDebug : d.showDebug,
     mappings,
   };
 }

@@ -1,3 +1,4 @@
+import { APP_VERSION } from '../../version';
 import { useState } from 'react';
 import { Badge, Button, Panel, SettingRow as Row, selectClass } from '../../design/ui';
 import { GESTURE_SPEEDS, type GestureSpeed } from '../../gestures/definitions';
@@ -120,6 +121,9 @@ export function Settings() {
             checked={settings.showHandCam}
             onChange={(v) => updateSettings({ showHandCam: v })}
           />
+        </Row>
+        <Row label="Show tracking details" hint={`Adds a line to the hand window with speed and finger readings, handy when something feels slow. Version: ${APP_VERSION}.`}>
+          <Switch label="Show tracking details" checked={settings.showDebug} onChange={(v) => updateSettings({ showDebug: v })} />
         </Row>
         <Row
           label="Air cursor"

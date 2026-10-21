@@ -85,3 +85,9 @@ Legend: [x] built, [ ] not built. "Verified" says what was actually checked.
 ## Next step
 
 Apply the Phase 3 update (`npm install` is needed for the new packages), check the globe on a phone, then Phase 4 (Pulse news).
+
+## Phase 3.4: speed and cursor accuracy (untested on a real phone)
+- Hand tracking runs on a small 320x240 camera picture and a frame governor: if the hand model is slow, frames are skipped so touches and drawing keep working. If the phone stays under 18 fps, visuals get lighter automatically.
+- The air cursor appears for any detected hand in a pointing pose, also when the main gesture recogniser says "pointing". A half-curled middle finger still counts as pointing.
+- Magnetic targets: the cursor counts as on a button when it is within about 22 px of it, so small buttons are easier to hit.
+- Settings → "Show tracking details" adds a line to the hand window (model time, camera size, quality tier, finger readings). The version is shown in the same setting's hint.

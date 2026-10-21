@@ -49,6 +49,7 @@ export function HandView({ className = '', emptyText = 'Camera is off' }: { clas
         const scale = canvas.width / Math.max(1, canvas.clientWidth || canvas.width);
         const W = canvas.width;
         const H = canvas.height;
+        const perf = engine.getSnapshot().perf; // slow phone: drop the glow pass
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
         for (const hand of hands) {
@@ -70,12 +71,14 @@ export function HandView({ className = '', emptyText = 'Camera is off' }: { clas
               const a = finger.ids[k];
               const b = finger.ids[k + 1];
               const w = (2.6 - k * 0.4) * scale;
-              ctx.strokeStyle = finger.glow;
-              ctx.lineWidth = w * 3;
-              ctx.beginPath();
-              ctx.moveTo(px(a), py(a));
-              ctx.lineTo(px(b), py(b));
-              ctx.stroke();
+              if (perf === 0) {
+                ctx.strokeStyle = finger.glow;
+                ctx.lineWidth = w * 3;
+                ctx.beginPath();
+                ctx.moveTo(px(a), py(a));
+                ctx.lineTo(px(b), py(b));
+                ctx.stroke();
+              }
               ctx.strokeStyle = finger.color;
               ctx.lineWidth = w;
               ctx.beginPath();

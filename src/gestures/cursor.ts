@@ -71,6 +71,7 @@ const LEAD_FROM_SPEED = 0.35;
 const LEAD_FULL_SPEED = 0.9;
 const INDEX_UP_RATIO = 0.95;
 const FINGER_UP_RATIO = 1.0;
+const POINT_LEAD = 0.28;
 
 export type HandShape = 'point' | 'two' | 'none';
 
@@ -88,6 +89,8 @@ export function handShape(lm: Landmarks, aspect: number, approachRatio: number):
   const ringUp = ring > FINGER_UP_RATIO;
   const pinkyUp = pinky > FINGER_UP_RATIO;
   if (indexUp && !middleUp) return 'point';
+  // Middle finger only half-curled still counts as pointing: the index must clearly be the longest finger.
+  if (indexUp && !ringUp && !pinkyUp && index - middle > POINT_LEAD) return 'point';
   if (indexUp && middleUp && !ringUp) return 'two';
   // "OK" style pinch: the index curls toward the thumb while other fingers stay up. A fist must not count.
   const handSize = Math.max(1e-6, dist(lm[LM.WRIST], lm[LM.MIDDLE_MCP], aspect));
@@ -193,7 +196,14 @@ export class AirCursorTracker {
     return { x: mirror ? 1 - sx : sx, y: clamp01((py - marginY) / (1 - 2 * marginY)) };
   }
 
-  update(t: number, lm: Landmarks): { state: CursorState; events: CursorEvent[] } {
+  /** What the cursor saw on the last frame, for the optional on-screen diagnostics. */
+  debug(): { shape: HandShape; ratios: number[]; hinted: boolean } {
+    return this.lastDebug;
+  }
+  private lastDebug: { shape: HandShape; ratios: number[]; hinted: boolean } = { shape: 'none', ratios: [], hinted: false };
+
+  /** `hint`: the gesture recogniser already says the hand is pointing; trust it when the quick check says 'none'. */
+  update(t: number, lm: Landmarks, hint = false): { state: CursorState; events: CursorEvent[] } {
     const events: CursorEvent[] = [];
     if (lm.length < 21) {
       return { state: this.state, events: this.lost() };
@@ -204,7 +214,10 @@ export class AirCursorTracker {
     const ratio = dist(lm[LM.THUMB_TIP], lm[LM.INDEX_TIP], aspect) / handSize;
     const closing = clamp01((this.cfg.approachRatio - ratio) / (this.cfg.approachRatio - this.cfg.pressRatio));
 
-    const shape = handShape(lm, aspect, this.cfg.approachRatio);
+    const quick = handShape(lm, aspect, this.cfg.approachRatio);
+    const hinted = hint && quick === 'none';
+    const shape: HandShape = hinted ? 'point' : quick;
+    this.lastDebug = { shape, ratios: fingerRatios(lm, aspect).map((r) => Math.round(r * 100) / 100), hinted };
     const eligible = shape !== 'none' || this.pressed;
     if (eligible) this.lastEligible = t;
     if (!eligible && t - this.lastEligible > HIDE_GRACE_MS) {
